@@ -1,0 +1,23 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            cd /opt/company-agents
+            git pull origin master
+            source venv/bin/activate && pip install -r requirements.txt
+            sudo systemctl restart company-agents
