@@ -1,0 +1,51 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "1b3b67da-f48d-41cd-a4e7-5fcab3b929af",
+  "developer": {
+    "name": "Duempelfeld & Partners GmbH",
+    "websiteUrl": "https://public-bikes-prove.loca.lt",
+    "privacyUrl": "https://public-bikes-prove.loca.lt/privacy",
+    "termsOfUseUrl": "https://public-bikes-prove.loca.lt/terms"
+  },
+  "name": {
+    "short": "Company Agents Bot",
+    "full": "Company Agents Bot - KI-Assistent fuer Bueroaufgaben"
+  },
+  "description": {
+    "short": "KI-Assistent fuer Bueroaufgaben",
+    "full": "KI-Assistent fuer Bueroaufgaben, powered by LangGraph und Claude. Verwaltet Kontakte, Rechnungen und Dokumente ueber Lexoffice."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#0078D4",
+  "bots": [
+    {
+      "botId": "bb1ca920-d7c5-42dd-b57f-75baa1fa17b2",
+      "scopes": ["personal", "team"],
+      "supportsFiles": true,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal", "team"],
+          "commands": [
+            {
+              "title": "Kontakte",
+              "description": "Kontakte aus Lexoffice abrufen"
+            },
+            {
+              "title": "Rechnungen",
+              "description": "Rechnungen aus Lexoffice abrufen"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "validDomains": [
+    "public-bikes-prove.loca.lt"
+  ]
+}

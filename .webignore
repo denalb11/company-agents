@@ -1,0 +1,23 @@
+# Azure App Service deployment exclusions
+# Processed by 'az webapp up' and the Kudu zip-deploy client.
+
+# Local virtual environment — Azure installs from requirements.txt
+venv/
+
+# Uploaded files — runtime data, not source code
+uploads/
+
+# Secrets — set these as App Service Application Settings instead
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Teams app package (build artefact, not needed at runtime)
+teams_app/
+
+# Dev/OS noise
+.DS_Store
+*.log

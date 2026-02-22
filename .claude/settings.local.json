@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(cd:*)",
+      "Bash(powershell.exe:*)",
+      "WebFetch(domain:developer.microsoft.com)",
+      "Bash(python:*)"
+    ]
+  }
+}

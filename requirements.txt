@@ -1,0 +1,10 @@
+langgraph
+langchain-anthropic
+python-dotenv
+requests
+botbuilder-core
+botbuilder-schema
+botframework-connector
+botbuilder-integration-aiohttp
+aiohttp
+gunicorn
