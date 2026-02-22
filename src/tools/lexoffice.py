@@ -41,11 +41,13 @@ def get_contacts() -> list:
 @tool
 def get_invoices() -> list:
     """Fetch all invoices from Lexoffice."""
-    logger.info("API call | GET /invoices")
-    response = requests.get(f"{BASE_URL}/invoices", headers=_get_headers())
+    endpoint = "/voucherlist"
+    params = {"voucherType": "invoice", "voucherStatus": "any"}
+    logger.info("API call | GET %s params=%s", endpoint, params)
+    response = requests.get(f"{BASE_URL}{endpoint}", headers=_get_headers(), params=params)
     response.raise_for_status()
     result = response.json().get("content", [])
-    logger.info("API response | GET /invoices status=%d count=%d", response.status_code, len(result))
+    logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
     return result
 
 

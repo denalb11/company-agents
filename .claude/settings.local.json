@@ -5,7 +5,9 @@
       "Bash(cd:*)",
       "Bash(powershell.exe:*)",
       "WebFetch(domain:developer.microsoft.com)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "WebFetch(domain:developers.lexoffice.io)",
+      "WebFetch(domain:developers.lexware.io)"
     ]
   }
 }
