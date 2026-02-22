@@ -1,9 +1,11 @@
+import logging
 import os
 import mimetypes
 from pathlib import Path
 import requests
 from langchain_core.tools import tool
 
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.lexoffice.io/v1"
 
@@ -28,17 +30,23 @@ def _get_auth_header() -> dict:
 @tool
 def get_contacts() -> list:
     """Fetch all contacts from Lexoffice."""
+    logger.info("API call | GET /contacts")
     response = requests.get(f"{BASE_URL}/contacts", headers=_get_headers())
     response.raise_for_status()
-    return response.json().get("content", [])
+    result = response.json().get("content", [])
+    logger.info("API response | GET /contacts status=%d count=%d", response.status_code, len(result))
+    return result
 
 
 @tool
 def get_invoices() -> list:
     """Fetch all invoices from Lexoffice."""
+    logger.info("API call | GET /invoices")
     response = requests.get(f"{BASE_URL}/invoices", headers=_get_headers())
     response.raise_for_status()
-    return response.json().get("content", [])
+    result = response.json().get("content", [])
+    logger.info("API response | GET /invoices status=%d count=%d", response.status_code, len(result))
+    return result
 
 
 @tool
@@ -61,6 +69,7 @@ def upload_document(file_path: str) -> str:
     if mime_type is None:
         mime_type = "application/octet-stream"
 
+    logger.info("API call | POST /files filename=%s mime_type=%s", path.name, mime_type)
     try:
         with open(path, "rb") as f:
             response = requests.post(
@@ -71,10 +80,18 @@ def upload_document(file_path: str) -> str:
             )
         response.raise_for_status()
         document_id = response.json().get("id", "unknown")
+        logger.info("Upload success | filename=%s document_id=%s", path.name, document_id)
         return f"Document uploaded successfully. Document ID: {document_id}"
     except requests.HTTPError as e:
+        logger.error(
+            "Upload failed | filename=%s status=%d response=%s",
+            path.name,
+            e.response.status_code,
+            e.response.text,
+        )
         return f"Upload failed (HTTP {e.response.status_code}): {e.response.text}"
     except Exception as e:
+        logger.exception("Upload failed | filename=%s", path.name)
         return f"Upload failed: {e}"
 
 

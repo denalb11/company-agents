@@ -28,6 +28,10 @@ from src.core.orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
 
+
+def _user_id(activity: Activity) -> str:
+    return activity.from_property.id if activity.from_property else "unknown"
+
 UPLOADS_DIR = pathlib.Path("uploads")
 UPLOADS_DIR.mkdir(exist_ok=True)
 
@@ -49,6 +53,13 @@ class CompanyTeamsBot:
 
     async def on_turn(self, turn_context: TurnContext) -> None:
         activity = turn_context.activity
+
+        logger.info(
+            "Incoming activity | type=%s user=%s channel=%s",
+            activity.type,
+            _user_id(activity),
+            activity.channel_id or "unknown",
+        )
 
         if activity.type == ActivityTypes.message:
             await self._on_message(turn_context)
@@ -90,6 +101,11 @@ class CompanyTeamsBot:
             )
             return
 
+        logger.info(
+            "Text message | user=%s length=%d",
+            _user_id(activity),
+            len(text),
+        )
         await turn_context.send_activity("Ihre Anfrage wird verarbeitet, bitte warten …")
         response = await self._run_agent(text)
         await turn_context.send_activity(response)
@@ -131,9 +147,14 @@ class CompanyTeamsBot:
             with open(file_path, "wb") as f:
                 f.write(data)
 
-            logger.info("Saved attachment '%s' to '%s'.", filename, file_path)
+            logger.info(
+                "File upload received | user=%s filename=%s size=%d bytes",
+                _user_id(turn_context.activity),
+                filename,
+                len(data),
+            )
         except Exception as exc:
-            logger.exception("Failed to download attachment.")
+            logger.exception("Failed to download attachment | filename=%s", filename)
             await turn_context.send_activity(
                 f"Beim Herunterladen der Datei ist ein Fehler aufgetreten: {exc}"
             )
@@ -150,6 +171,18 @@ class CompanyTeamsBot:
             f"Bitte verarbeite diese Datei entsprechend."
         )
         response = await self._run_agent(agent_message)
+
+        # Log the Lexoffice document ID if the agent confirms a successful upload
+        if "Document ID:" in response:
+            import re
+            match = re.search(r"Document ID:\s*(\S+)", response)
+            if match:
+                logger.info(
+                    "Lexoffice upload confirmed | filename=%s document_id=%s",
+                    filename,
+                    match.group(1),
+                )
+
         await turn_context.send_activity(response)
 
     # ------------------------------------------------------------------
@@ -267,6 +300,8 @@ def start_teams_server(orchestrator: Orchestrator, port: int = 3978) -> None:
 def _build_module_app() -> web.Application:
     from dotenv import load_dotenv
     load_dotenv()
+    from src.core.logger import setup_logging
+    setup_logging()
     from src.core.orchestrator import Orchestrator as _Orchestrator
     return create_app(_Orchestrator())
 
