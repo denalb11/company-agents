@@ -24,6 +24,7 @@ from aiohttp import web
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
 from botbuilder.schema import Activity, ActivityTypes
 
+from src.core.config import get_company_for_channel
 from src.core.orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
@@ -90,7 +91,9 @@ class CompanyTeamsBot:
         if activity.attachments:
             for attachment in activity.attachments:
                 if attachment.content_type == "application/vnd.microsoft.teams.file.download.info":
-                    await self._handle_file_attachment(turn_context, attachment)
+                    channel_name = self._extract_channel_name(activity)
+                    company_key = get_company_for_channel(channel_name or "")
+                    await self._handle_file_attachment(turn_context, attachment, company_key)
                     return
 
         # --- Plain text ---
@@ -101,20 +104,25 @@ class CompanyTeamsBot:
             )
             return
 
+        channel_name = self._extract_channel_name(activity)
+        company_key = get_company_for_channel(channel_name or "")
+
         logger.info(
-            "Text message | user=%s length=%d",
+            "Text message | user=%s length=%d channel=%s company=%s",
             _user_id(activity),
             len(text),
+            channel_name or "unknown",
+            company_key or "default",
         )
         await turn_context.send_activity("Ihre Anfrage wird verarbeitet, bitte warten …")
-        response = await self._run_agent(text)
+        response = await self._run_agent(text, company_key)
         await turn_context.send_activity(response)
 
     # ------------------------------------------------------------------
     # File handling
     # ------------------------------------------------------------------
 
-    async def _handle_file_attachment(self, turn_context: TurnContext, attachment) -> None:
+    async def _handle_file_attachment(self, turn_context: TurnContext, attachment, company_key: str | None = None) -> None:
         """Download a Teams file attachment, save to uploads/, pass path to agent."""
         content = attachment.content or {}
         download_url: Optional[str] = (
@@ -170,7 +178,7 @@ class CompanyTeamsBot:
             f"{file_path.resolve()}. Dateiname: {filename}. "
             f"Bitte verarbeite diese Datei entsprechend."
         )
-        response = await self._run_agent(agent_message)
+        response = await self._run_agent(agent_message, company_key)
 
         # Log the Lexoffice document ID if the agent confirms a successful upload
         if "Document ID:" in response:
@@ -189,10 +197,21 @@ class CompanyTeamsBot:
     # Helpers
     # ------------------------------------------------------------------
 
-    async def _run_agent(self, message: str) -> str:
+    async def _run_agent(self, message: str, company_key: str | None = None) -> str:
         """Run the synchronous orchestrator in a thread pool to avoid blocking."""
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self.orchestrator.run, message)
+        return await loop.run_in_executor(None, self.orchestrator.run, message, company_key)
+
+    @staticmethod
+    def _extract_channel_name(activity: Activity) -> str | None:
+        """Extract the Teams channel name from the activity's channel data."""
+        try:
+            channel_data = activity.channel_data
+            if isinstance(channel_data, dict):
+                return channel_data.get("channel", {}).get("name")
+        except Exception:
+            pass
+        return None
 
     @staticmethod
     def _extract_tenant_id(activity: Activity) -> Optional[str]:
