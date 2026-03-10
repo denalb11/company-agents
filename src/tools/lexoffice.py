@@ -52,6 +52,19 @@ def get_invoices() -> list:
 
 
 @tool
+def get_purchase_invoices() -> list:
+    """Fetch all purchase invoices (Eingangsrechnungen) from Lexoffice."""
+    endpoint = "/voucherlist"
+    params = {"voucherType": "purchaseinvoice", "voucherStatus": "any"}
+    logger.info("API call | GET %s params=%s", endpoint, params)
+    response = requests.get(f"{BASE_URL}{endpoint}", headers=_get_headers(), params=params)
+    response.raise_for_status()
+    result = response.json().get("content", [])
+    logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
+    return result
+
+
+@tool
 def upload_document(file_path: str) -> str:
     """Upload a document file to Lexoffice for review.
 
@@ -100,4 +113,4 @@ def upload_document(file_path: str) -> str:
 class LexofficeTool:
     """Collection of Lexoffice API tools for use with LangGraph agents."""
 
-    tools = [get_contacts, get_invoices, upload_document]
+    tools = [get_contacts, get_invoices, get_purchase_invoices, upload_document]

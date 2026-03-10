@@ -2,11 +2,11 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage
 from langgraph.prebuilt import create_react_agent
 
-from src.tools.lexoffice import get_contacts, get_invoices, upload_document
+from src.tools.lexoffice import get_contacts, get_invoices, get_purchase_invoices, upload_document
 
-SYSTEM_PROMPT = "You are a helpful office assistant. You have access to the following tools: get_contacts, get_invoices, and upload_document. Always use the upload_document tool when the user wants to upload a file."
+SYSTEM_PROMPT = "You are a helpful office assistant. You have access to the following tools: get_contacts, get_invoices, get_purchase_invoices, and upload_document. Always use the upload_document tool when the user wants to upload a file."
 
-DEFAULT_TOOLS = [get_contacts, get_invoices, upload_document]
+DEFAULT_TOOLS = [get_contacts, get_invoices, get_purchase_invoices, upload_document]
 
 
 class OfficeAgent:
