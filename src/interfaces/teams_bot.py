@@ -31,6 +31,16 @@ from src.core.orchestrator import Orchestrator
 logger = logging.getLogger(__name__)
 
 
+def _extract_pdf_markers(text: str) -> tuple[str, list[str]]:
+    """Extract PDF_READY:<path> markers from agent output.
+
+    Returns (cleaned_text, list_of_pdf_paths).
+    """
+    pdf_paths = re.findall(r"PDF_READY:(\S+\.pdf)", text)
+    clean = re.sub(r"PDF_READY:\S+\.pdf\s*", "", text).strip()
+    return clean, pdf_paths
+
+
 def _user_id(activity: Activity) -> str:
     return activity.from_property.id if activity.from_property else "unknown"
 
@@ -189,10 +199,12 @@ class CompanyTeamsBot:
         try:
             response = await self._run_agent(text, company_key)
             logger.info("Agent response ready, length=%d", len(response))
-            await turn_context.send_activity(response)
+            # Strip PDF_READY markers before sending text to user
+            clean_response, pdf_paths = _extract_pdf_markers(response)
+            await turn_context.send_activity(clean_response or "PDF wurde heruntergeladen.")
             logger.info("Sent agent response to user")
-            # If response contains a saved PDF path, send it as a file in chat
-            await self._send_pdf_if_present(turn_context, response)
+            for pdf_path in pdf_paths:
+                await self._send_file_consent_card(turn_context, pathlib.Path(pdf_path))
         except Exception as e:
             logger.error("Failed to send agent response: %s", e)
 
@@ -245,19 +257,6 @@ class CompanyTeamsBot:
             if match:
                 logger.info("Lexoffice upload confirmed | filename=%s document_id=%s", filename, match.group(1))
         await turn_context.send_activity(response)
-
-    async def _send_pdf_if_present(self, turn_context: TurnContext, agent_response: str) -> None:
-        """If the agent response mentions a saved PDF path, send a Teams file consent card."""
-        match = re.search(r"PDF gespeichert unter:\s*(\S+\.pdf)", agent_response)
-        if not match:
-            return
-        file_path = pathlib.Path(match.group(1))
-        if not file_path.exists():
-            logger.warning("PDF file not found: %s", file_path)
-            return
-        conv_type = (turn_context.activity.conversation.conversation_type or "").lower()
-        logger.info("PDF found, sending file consent card | conv_type='%s'", conv_type)
-        await self._send_file_consent_card(turn_context, file_path)
 
     async def _send_file_consent_card(self, turn_context: TurnContext, file_path: pathlib.Path) -> None:
         """Send a Teams file consent card (personal chat only)."""

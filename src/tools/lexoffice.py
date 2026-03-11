@@ -104,17 +104,24 @@ def get_invoice_document(invoice_id: str, save_path: str = "") -> str:
     endpoint = f"/invoices/{invoice_id}/document"
     logger.info("API call | GET %s", endpoint)
     try:
-        response = requests.get(
-            f"{BASE_URL}{endpoint}",
-            headers=_get_auth_header(),
-        )
+        response = requests.get(f"{BASE_URL}{endpoint}", headers=_get_auth_header())
         response.raise_for_status()
+        content_type = response.headers.get("content-type", "")
+        logger.info("Invoice document response | content_type=%s size=%d", content_type, len(response.content))
+        # If the API returned JSON with a documentFileId, fetch the actual PDF via /files
+        if "application/json" in content_type or (len(response.content) < 500 and response.content.startswith(b"{")):
+            file_id = response.json().get("documentFileId") or response.json().get("id")
+            if not file_id:
+                return f"Unerwartete API-Antwort: {response.text}"
+            logger.info("Fetching actual PDF via /files/%s", file_id)
+            response = requests.get(f"{BASE_URL}/files/{file_id}", headers=_get_auth_header())
+            response.raise_for_status()
         out_path = Path(save_path) if save_path else Path("uploads") / f"{invoice_id}.pdf"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "wb") as f:
             f.write(response.content)
-        logger.info("Invoice PDF downloaded | invoice_id=%s path=%s size=%d bytes", invoice_id, out_path, len(response.content))
-        return f"PDF gespeichert unter: {out_path} ({len(response.content)} Bytes)"
+        logger.info("Invoice PDF saved | invoice_id=%s path=%s size=%d bytes", invoice_id, out_path, len(response.content))
+        return f"PDF_READY:{out_path}"
     except requests.HTTPError as e:
         logger.error("Invoice PDF download failed | invoice_id=%s status=%d response=%s", invoice_id, e.response.status_code, e.response.text)
         return f"Download fehlgeschlagen (HTTP {e.response.status_code}): {e.response.text}"
@@ -254,17 +261,23 @@ def create_lexoffice_tools(api_key: str) -> list:
         endpoint = f"/invoices/{invoice_id}/document"
         logger.info("API call | GET %s", endpoint)
         try:
-            response = requests.get(
-                f"{BASE_URL}{endpoint}",
-                headers=_auth_header(),
-            )
+            response = requests.get(f"{BASE_URL}{endpoint}", headers=_auth_header())
             response.raise_for_status()
+            content_type = response.headers.get("content-type", "")
+            logger.info("Invoice document response | content_type=%s size=%d", content_type, len(response.content))
+            if "application/json" in content_type or (len(response.content) < 500 and response.content.startswith(b"{")):
+                file_id = response.json().get("documentFileId") or response.json().get("id")
+                if not file_id:
+                    return f"Unerwartete API-Antwort: {response.text}"
+                logger.info("Fetching actual PDF via /files/%s", file_id)
+                response = requests.get(f"{BASE_URL}/files/{file_id}", headers=_auth_header())
+                response.raise_for_status()
             out_path = Path(save_path) if save_path else Path("uploads") / f"{invoice_id}.pdf"
             out_path.parent.mkdir(parents=True, exist_ok=True)
             with open(out_path, "wb") as f:
                 f.write(response.content)
-            logger.info("Invoice PDF downloaded | invoice_id=%s path=%s size=%d bytes", invoice_id, out_path, len(response.content))
-            return f"PDF gespeichert unter: {out_path} ({len(response.content)} Bytes)"
+            logger.info("Invoice PDF saved | invoice_id=%s path=%s size=%d bytes", invoice_id, out_path, len(response.content))
+            return f"PDF_READY:{out_path}"
         except requests.HTTPError as e:
             logger.error("Invoice PDF download failed | invoice_id=%s status=%d response=%s", invoice_id, e.response.status_code, e.response.text)
             return f"Download fehlgeschlagen (HTTP {e.response.status_code}): {e.response.text}"
