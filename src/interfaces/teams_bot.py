@@ -23,7 +23,8 @@ from typing import Optional
 import aiohttp
 from aiohttp import web
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
-from botbuilder.schema import Activity, ActivityTypes
+from types import SimpleNamespace
+from botbuilder.schema import Activity, ActivityTypes, Attachment
 
 from src.core.config import CHAT_PREFIX_MAP, get_allowed_companies, get_company_for_channel, get_company_for_prefix
 from src.core.orchestrator import Orchestrator
@@ -80,6 +81,8 @@ class CompanyTeamsBot:
                 activity.channel_data,
             )
             await self._on_message(turn_context)
+        elif activity.type == ActivityTypes.invoke and activity.name == "fileConsent/invoke":
+            await self._handle_file_consent_invoke(turn_context)
         # Ignore other activity types (conversationUpdate, typing, etc.)
 
     # ------------------------------------------------------------------
@@ -260,17 +263,74 @@ class CompanyTeamsBot:
                 logger.info("Lexoffice upload confirmed | filename=%s document_id=%s", filename, match.group(1))
         await turn_context.send_activity(response)
         for pdf_path in pdf_paths:
-            await self._send_pdf_download_link(turn_context, pathlib.Path(pdf_path))
+            await self._send_file_consent_card(turn_context, pathlib.Path(pdf_path))
 
-    async def _send_pdf_download_link(self, turn_context: TurnContext, file_path: pathlib.Path) -> None:
-        """Send a direct download link for a PDF file."""
+    async def _send_file_consent_card(self, turn_context: TurnContext, file_path: pathlib.Path) -> None:
+        """Send a Teams file consent card so the PDF lands directly in the chat."""
         if not file_path.exists():
-            logger.warning("PDF not found for download link: %s", file_path)
+            logger.warning("PDF not found: %s", file_path)
             return
-        base_url = os.environ.get("BOT_BASE_URL", "https://bot.yunne.de").rstrip("/")
-        url = f"{base_url}/downloads/{file_path.name}"
-        size_kb = file_path.stat().st_size // 1024
-        await turn_context.send_activity(f"📄 [{file_path.stem}.pdf]({url}) ({size_kb} KB)")
+        try:
+            file_size = file_path.stat().st_size
+            consent_attachment = Attachment(
+                content_type="application/vnd.microsoft.teams.card.file.consent",
+                name=file_path.name,
+                content={
+                    "description": "Rechnungs-PDF von Lexoffice",
+                    "sizeInBytes": file_size,
+                    "acceptContext": {"filePath": str(file_path)},
+                    "declineContext": {},
+                },
+            )
+            await turn_context.send_activity(Activity(type=ActivityTypes.message, attachments=[consent_attachment]))
+            logger.info("Sent file consent card | filename=%s size=%d", file_path.name, file_size)
+        except Exception as e:
+            logger.error("Failed to send file consent card: %s", e)
+
+    async def _handle_file_consent_invoke(self, turn_context: TurnContext) -> None:
+        """Handle Teams fileConsent/invoke: upload PDF to SharePoint when user accepts."""
+        value = turn_context.activity.value or {}
+        action = value.get("action", "")
+        logger.info("fileConsent/invoke | action=%s", action)
+
+        # invokeResponse must have value with .status attribute (not a plain dict)
+        def _invoke_ok():
+            return Activity(type="invokeResponse", value=SimpleNamespace(status=200))
+
+        if action == "decline":
+            await turn_context.send_activity(_invoke_ok())
+            return
+
+        context = value.get("context", {})
+        file_path = pathlib.Path(context.get("filePath", ""))
+        upload_info = value.get("uploadInfo", {})
+        upload_url: str = upload_info.get("uploadUrl", "")
+
+        # Respond to invoke immediately
+        await turn_context.send_activity(_invoke_ok())
+
+        if not file_path.exists() or not upload_url:
+            logger.error("File not found or no upload URL | path=%s", file_path)
+            return
+
+        try:
+            with open(file_path, "rb") as f:
+                data = f.read()
+            file_size = len(data)
+            async with aiohttp.ClientSession() as session:
+                async with session.put(
+                    upload_url,
+                    data=data,
+                    headers={
+                        "Content-Type": "application/pdf",
+                        "Content-Length": str(file_size),
+                        "Content-Range": f"bytes 0-{file_size - 1}/{file_size}",
+                    },
+                ) as resp:
+                    logger.info("File PUT | status=%d", resp.status)
+            logger.info("File consent upload complete | filename=%s", file_path.name)
+        except Exception as e:
+            logger.exception("File consent upload failed | path=%s", file_path)
 
 
     async def _handle_file_attachment(self, turn_context: TurnContext, attachment, company_key: str | None = None) -> None:
