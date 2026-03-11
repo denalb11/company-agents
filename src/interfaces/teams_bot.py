@@ -16,13 +16,14 @@ import asyncio
 import logging
 import os
 import pathlib
+import re
 from datetime import datetime
 from typing import Optional
 
 import aiohttp
 from aiohttp import web
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
-from botbuilder.schema import Activity, ActivityTypes
+from botbuilder.schema import Activity, ActivityTypes, Attachment
 
 from src.core.config import CHAT_PREFIX_MAP, get_allowed_companies, get_company_for_channel, get_company_for_prefix
 from src.core.orchestrator import Orchestrator
@@ -72,6 +73,8 @@ class CompanyTeamsBot:
                 activity.channel_data,
             )
             await self._on_message(turn_context)
+        elif activity.type == ActivityTypes.invoke and activity.name == "fileConsent/invoke":
+            await self._handle_file_consent_invoke(turn_context)
         # Ignore other activity types (conversationUpdate, typing, etc.)
 
     # ------------------------------------------------------------------
@@ -188,6 +191,8 @@ class CompanyTeamsBot:
             logger.info("Agent response ready, length=%d", len(response))
             await turn_context.send_activity(response)
             logger.info("Sent agent response to user")
+            # If response contains a saved PDF path, send it as a file in chat
+            await self._send_pdf_if_present(turn_context, response)
         except Exception as e:
             logger.error("Failed to send agent response: %s", e)
 
@@ -236,11 +241,103 @@ class CompanyTeamsBot:
         )
         response = await self._run_agent(agent_message, company_key)
         if "Document ID:" in response:
-            import re
             match = re.search(r"Document ID:\s*(\S+)", response)
             if match:
                 logger.info("Lexoffice upload confirmed | filename=%s document_id=%s", filename, match.group(1))
         await turn_context.send_activity(response)
+
+    async def _send_pdf_if_present(self, turn_context: TurnContext, agent_response: str) -> None:
+        """If the agent response mentions a saved PDF path, send a Teams file consent card."""
+        match = re.search(r"PDF gespeichert unter:\s*(\S+\.pdf)", agent_response)
+        if not match:
+            return
+        file_path = pathlib.Path(match.group(1))
+        if not file_path.exists():
+            logger.warning("PDF file not found for Teams upload: %s", file_path)
+            return
+        await self._send_file_consent_card(turn_context, file_path)
+
+    async def _send_file_consent_card(self, turn_context: TurnContext, file_path: pathlib.Path) -> None:
+        """Send a Teams file consent card so the user can accept/decline receiving the PDF."""
+        try:
+            file_size = file_path.stat().st_size
+            consent_attachment = Attachment(
+                content_type="application/vnd.microsoft.teams.card.file.consent",
+                name=file_path.name,
+                content={
+                    "description": "Rechnungs-PDF von Lexoffice",
+                    "sizeInBytes": file_size,
+                    "acceptContext": {"filePath": str(file_path)},
+                    "declineContext": {"filePath": str(file_path)},
+                },
+            )
+            consent_activity = Activity(type=ActivityTypes.message, attachments=[consent_attachment])
+            await turn_context.send_activity(consent_activity)
+            logger.info("Sent file consent card | filename=%s size=%d", file_path.name, file_size)
+        except Exception as e:
+            logger.error("Failed to send file consent card: %s", e)
+
+    async def _handle_file_consent_invoke(self, turn_context: TurnContext) -> None:
+        """Handle Teams fileConsent/invoke: upload file when user accepts."""
+        value = turn_context.activity.value or {}
+        action = value.get("action")
+        context = value.get("context", {})
+        file_path = pathlib.Path(context.get("filePath", ""))
+
+        if action == "decline" or not file_path.exists():
+            logger.info("File consent declined or file missing | path=%s", file_path)
+            await turn_context.send_activity(
+                Activity(type="invokeResponse", value={"status": 200})
+            )
+            return
+
+        upload_info = value.get("uploadInfo", {})
+        upload_url: str = upload_info.get("uploadUrl", "")
+        content_url: str = upload_info.get("contentUrl", "")
+        unique_id: str = upload_info.get("uniqueId", "")
+        file_type: str = upload_info.get("fileType", "pdf")
+
+        try:
+            with open(file_path, "rb") as f:
+                data = f.read()
+            async with aiohttp.ClientSession() as session:
+                async with session.put(
+                    upload_url,
+                    data=data,
+                    headers={
+                        "Content-Type": "application/octet-stream",
+                        "Content-Length": str(len(data)),
+                        "Content-Range": f"bytes 0-{len(data)-1}/{len(data)}",
+                    },
+                ) as resp:
+                    if resp.status not in (200, 201):
+                        body = await resp.text()
+                        logger.error("File upload to Teams failed | status=%d body=%s", resp.status, body)
+                        await turn_context.send_activity("Datei-Upload fehlgeschlagen.")
+                        return
+
+            # Confirm upload with a file info card
+            file_info_attachment = Attachment(
+                content_type="application/vnd.microsoft.teams.card.file.info",
+                name=file_path.name,
+                content={
+                    "uniqueId": unique_id,
+                    "fileType": file_type,
+                    "etag": unique_id,
+                },
+                content_url=content_url,
+            )
+            confirm_activity = Activity(type=ActivityTypes.message, attachments=[file_info_attachment])
+            await turn_context.send_activity(confirm_activity)
+            logger.info("File uploaded and confirmed | filename=%s", file_path.name)
+
+            # Respond to the invoke
+            await turn_context.send_activity(
+                Activity(type="invokeResponse", value={"status": 200})
+            )
+        except Exception as e:
+            logger.exception("File upload to Teams failed | path=%s", file_path)
+            await turn_context.send_activity(f"Fehler beim Datei-Upload: {e}")
 
     async def _handle_file_attachment(self, turn_context: TurnContext, attachment, company_key: str | None = None) -> None:
         """Download a Teams file attachment, save to uploads/, pass path to agent."""
