@@ -1,6 +1,5 @@
 import re
 from langchain_anthropic import ChatAnthropic
-from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import SystemMessage
 from langgraph.prebuilt import create_react_agent
 
@@ -9,17 +8,6 @@ from src.tools.lexoffice import get_contacts, get_invoices, get_purchase_invoice
 SYSTEM_PROMPT = "You are a helpful office assistant. You have access to the following tools: get_contacts, get_invoices, get_purchase_invoices, and upload_document. Always use the upload_document tool when the user wants to upload a file."
 
 DEFAULT_TOOLS = [get_contacts, get_invoices, get_purchase_invoices, upload_document]
-
-
-class _PDFCapturingCallback(BaseCallbackHandler):
-    """Captures PDF_READY markers emitted by tools before the LLM can rewrite them."""
-
-    def __init__(self):
-        self.pdf_paths: list[str] = []
-
-    def on_tool_end(self, output, **kwargs):
-        if isinstance(output, str):
-            self.pdf_paths.extend(re.findall(r"PDF_READY:(\S+\.pdf)", output))
 
 
 class OfficeAgent:
@@ -39,10 +27,11 @@ class OfficeAgent:
 
     def run(self, message: str) -> tuple[str, list[str]]:
         """Returns (agent_text_response, list_of_pdf_paths)."""
-        callback = _PDFCapturingCallback()
-        result = self.agent.invoke(
-            {"messages": [("user", message)]},
-            config={"callbacks": [callback]},
-        )
+        result = self.agent.invoke({"messages": [("user", message)]})
         text = result["messages"][-1].content
-        return text, callback.pdf_paths
+        # Scan all ToolMessages in the conversation for PDF_READY markers
+        pdf_paths = []
+        for msg in result["messages"]:
+            content = msg.content if isinstance(msg.content, str) else ""
+            pdf_paths.extend(re.findall(r"PDF_READY:(\S+\.pdf)", content))
+        return text, pdf_paths
