@@ -26,6 +26,7 @@ from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, Tu
 from botbuilder.schema import Activity, ActivityTypes, Attachment
 
 from src.core.config import CHAT_PREFIX_MAP, get_allowed_companies, get_company_for_channel, get_company_for_prefix
+from src.core.graph_api import GraphApiClient
 from src.core.orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,8 @@ class CompanyTeamsBot:
         self._history: dict[str, list[tuple[str, str]]] = {}
         # Last used company per user
         self._last_company: dict[str, str] = {}
+        # Graph API client for OneDrive file uploads
+        self._graph = GraphApiClient()
 
     # ------------------------------------------------------------------
     # Activity dispatcher
@@ -106,6 +109,8 @@ class CompanyTeamsBot:
         user_id = _user_id(activity)
 
         # --- Pending state: user is answering a company question ---
+        user_aad_id = getattr(activity.from_property, "aad_object_id", None) or ""
+
         if user_id in self._pending:
             text = (activity.text or "").strip()
             company_key = CHAT_PREFIX_MAP.get(text.lower())
@@ -120,7 +125,7 @@ class CompanyTeamsBot:
                     try:
                         response, pdf_paths = await self._run_agent(pending["text"], company_key, user_id=user_id)
                         await turn_context.send_activity(response)
-                        await self._send_pdf_links(turn_context, pdf_paths)
+                        await self._send_pdf_links(turn_context, pdf_paths, user_aad_id=user_aad_id)
                     except Exception as e:
                         logger.error("Error in pending query handler: %s", e)
                         await turn_context.send_activity(f"Fehler bei der Verarbeitung: {e}")
@@ -207,7 +212,7 @@ class CompanyTeamsBot:
             logger.info("Agent response ready, length=%d pdf_count=%d", len(response), len(pdf_paths))
             await turn_context.send_activity(response)
             logger.info("Sent agent response to user")
-            await self._send_pdf_links(turn_context, pdf_paths)
+            await self._send_pdf_links(turn_context, pdf_paths, user_aad_id=user_aad_id)
         except Exception as e:
             logger.error("Failed to send agent response: %s", e)
 
@@ -255,40 +260,74 @@ class CompanyTeamsBot:
             f"Bitte verarbeite diese Datei entsprechend."
         )
         user_id = _user_id(turn_context.activity)
+        user_aad_id = getattr(turn_context.activity.from_property, "aad_object_id", None) or ""
         response, pdf_paths = await self._run_agent(agent_message, company_key, user_id=user_id)
         if "Document ID:" in response:
             match = re.search(r"Document ID:\s*(\S+)", response)
             if match:
                 logger.info("Lexoffice upload confirmed | filename=%s document_id=%s", filename, match.group(1))
         await turn_context.send_activity(response)
-        for pdf_path in pdf_paths:
-            await self._send_pdf_link(turn_context, pathlib.Path(pdf_path))
+        await self._send_pdf_links(turn_context, pdf_paths, user_aad_id=user_aad_id)
 
-    async def _send_pdf_links(self, turn_context: TurnContext, pdf_paths: list[str], max_files: int = 5) -> None:
-        """Send up to max_files PDF attachments; inform user if there are more."""
+    async def _send_pdf_links(self, turn_context: TurnContext, pdf_paths: list[str], max_files: int = 5, user_aad_id: str = "") -> None:
+        """Send up to max_files PDFs. Tries OneDrive upload (file bubble) first, falls back to link."""
         if not pdf_paths:
             return
         to_send = pdf_paths[:max_files]
         for p in to_send:
             try:
-                await self._send_pdf_link(turn_context, pathlib.Path(p))
+                file_path = pathlib.Path(p)
+                sent = False
+                if user_aad_id:
+                    sent = await self._send_pdf_as_teams_file(turn_context, file_path, user_aad_id)
+                if not sent:
+                    await self._send_pdf_link(turn_context, file_path)
             except Exception as e:
-                logger.error("Failed to send PDF link for %s: %s", p, e)
+                logger.error("Failed to send PDF for %s: %s", p, e)
         if len(pdf_paths) > max_files:
             remaining = len(pdf_paths) - max_files
             await turn_context.send_activity(
                 f"({remaining} weitere PDFs vorhanden — bitte spezifischer anfragen)"
             )
 
+    async def _send_pdf_as_teams_file(self, turn_context: TurnContext, file_path: pathlib.Path, user_aad_id: str) -> bool:
+        """Upload PDF to user's OneDrive and send as a Teams file card.
+
+        Returns True on success, False if Graph API upload failed (caller should fall back to link).
+        """
+        if not file_path.exists():
+            logger.warning("PDF not found: %s", file_path)
+            return False
+        try:
+            content = file_path.read_bytes()
+            item = await self._graph.upload_pdf_to_user_drive(user_aad_id, file_path.name, content)
+            attachment = Attachment(
+                content_type="application/vnd.microsoft.teams.card.file.info",
+                content={
+                    "uniqueId": item["id"],
+                    "fileType": "pdf",
+                    "etag": item.get("eTag", ""),
+                },
+                name=file_path.stem,
+                content_url=item["webUrl"],
+            )
+            activity = Activity(type=ActivityTypes.message, attachments=[attachment])
+            await turn_context.send_activity(activity)
+            logger.info("Sent Teams file card | file=%s item_id=%s", file_path.name, item.get("id"))
+            return True
+        except Exception as e:
+            logger.warning("Graph upload failed for %s, falling back to link: %s", file_path.name, e)
+            return False
+
     async def _send_pdf_link(self, turn_context: TurnContext, file_path: pathlib.Path) -> None:
-        """Send a clickable download link for the PDF."""
+        """Fallback: send a clickable download link for the PDF."""
         if not file_path.exists():
             logger.warning("PDF not found: %s", file_path)
             return
         base_url = os.environ.get("BOT_BASE_URL", "https://bot.yunne.de").rstrip("/")
         url = f"{base_url}/downloads/{file_path.name}"
         size_kb = file_path.stat().st_size // 1024
-        logger.info("Sending PDF link | url=%s size=%dKB", url, size_kb)
+        logger.info("Sending PDF link (fallback) | url=%s size=%dKB", url, size_kb)
         await turn_context.send_activity(f"📄 [{file_path.stem}]({url}) ({size_kb} KB)")
 
 
