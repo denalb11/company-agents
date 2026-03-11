@@ -114,9 +114,19 @@ class CompanyTeamsBot:
             channel_name or "unknown",
             company_key or "default",
         )
-        await turn_context.send_activity("Ihre Anfrage wird verarbeitet, bitte warten …")
-        response = await self._run_agent(text, company_key)
-        await turn_context.send_activity(response)
+        try:
+            await turn_context.send_activity("Ihre Anfrage wird verarbeitet, bitte warten …")
+            logger.info("Sent processing message to user")
+        except Exception as e:
+            logger.error("Failed to send processing message: %s", e)
+
+        try:
+            response = await self._run_agent(text, company_key)
+            logger.info("Agent response ready, length=%d", len(response))
+            await turn_context.send_activity(response)
+            logger.info("Sent agent response to user")
+        except Exception as e:
+            logger.error("Failed to send agent response: %s", e)
 
     # ------------------------------------------------------------------
     # File handling
