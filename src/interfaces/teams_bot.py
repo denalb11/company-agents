@@ -281,20 +281,15 @@ class CompanyTeamsBot:
             )
 
     async def _send_pdf_link(self, turn_context: TurnContext, file_path: pathlib.Path) -> None:
-        """Send PDF as a file attachment in the Teams chat."""
+        """Send a clickable download link for the PDF."""
         if not file_path.exists():
             logger.warning("PDF not found: %s", file_path)
             return
         base_url = os.environ.get("BOT_BASE_URL", "https://bot.yunne.de").rstrip("/")
         url = f"{base_url}/downloads/{file_path.name}"
         size_kb = file_path.stat().st_size // 1024
-        logger.info("Sending PDF attachment | url=%s size=%dKB", url, size_kb)
-        attachment = Attachment(
-            content_type="application/pdf",
-            name=file_path.name,
-            content_url=url,
-        )
-        await turn_context.send_activity(Activity(type=ActivityTypes.message, attachments=[attachment]))
+        logger.info("Sending PDF link | url=%s size=%dKB", url, size_kb)
+        await turn_context.send_activity(f"📄 [{file_path.stem}]({url}) ({size_kb} KB)")
 
 
     async def _handle_file_attachment(self, turn_context: TurnContext, attachment, company_key: str | None = None) -> None:
