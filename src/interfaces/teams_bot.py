@@ -123,7 +123,7 @@ class CompanyTeamsBot:
                     response, pdf_paths = await self._run_agent(pending["text"], company_key, user_id=user_id)
                     await turn_context.send_activity(response)
                     for pdf_path in pdf_paths:
-                        await self._send_pdf_download_link(turn_context, pathlib.Path(pdf_path))
+                        await self._send_file_consent_card(turn_context, pathlib.Path(pdf_path))
                 elif pending["type"] == "upload":
                     logger.info("Pending upload resolved | user=%s company=%s", user_id, company_key)
                     await self._process_upload(turn_context, pending["file_path"], pending["filename"], company_key)
@@ -208,7 +208,7 @@ class CompanyTeamsBot:
             await turn_context.send_activity(response)
             logger.info("Sent agent response to user")
             for pdf_path in pdf_paths:
-                await self._send_pdf_download_link(turn_context, pathlib.Path(pdf_path))
+                await self._send_file_consent_card(turn_context, pathlib.Path(pdf_path))
         except Exception as e:
             logger.error("Failed to send agent response: %s", e)
 
