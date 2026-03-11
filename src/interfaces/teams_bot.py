@@ -99,6 +99,16 @@ class CompanyTeamsBot:
                 if attachment.content_type == "application/vnd.microsoft.teams.file.download.info":
                     channel_name = self._extract_channel_name(activity)
                     company_key = get_company_for_channel(channel_name or "")
+                    if not company_key:
+                        await turn_context.send_activity(
+                            "Für welches Unternehmen soll die Datei hochgeladen werden?\n\n"
+                            "Bitte sende die Datei erneut mit einem Prefix:\n"
+                            "• **ms:** multiScout\n"
+                            "• **dp:** Dümpelfeld Partners\n"
+                            "• **nao:** Nao Intelligence\n\n"
+                            "Beispiel: Schreibe zuerst `ms:` und hänge dann die Datei an."
+                        )
+                        return
                     await self._handle_file_attachment(turn_context, attachment, company_key)
                     return
 
@@ -116,6 +126,17 @@ class CompanyTeamsBot:
         # Fallback: prefix-based routing for personal chat (e.g. "ms: zeige Rechnungen")
         if not company_key:
             company_key, text = get_company_for_prefix(text)
+
+        # No company detected → ask user
+        if not company_key:
+            await turn_context.send_activity(
+                "Für welches Unternehmen soll ich arbeiten? Bitte Prefix verwenden:\n\n"
+                "• **ms:** multiScout\n"
+                "• **dp:** Dümpelfeld Partners\n"
+                "• **nao:** Nao Intelligence\n\n"
+                "Beispiel: `ms: zeige alle Rechnungen`"
+            )
+            return
 
         logger.info(
             "Text message | user=%s length=%d channel=%s company=%s",
