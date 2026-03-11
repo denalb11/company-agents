@@ -91,21 +91,6 @@ def get_purchase_invoices() -> list:
 
 
 @tool
-def get_invoice_link(invoice_id: str) -> str:
-    """Get the direct deeplink URL to open a specific invoice in the Lexoffice web app.
-
-    Args:
-        invoice_id: The Lexoffice invoice ID (UUID).
-
-    Returns:
-        A URL string that opens the invoice directly in the Lexoffice web app.
-    """
-    url = f"https://app.lexoffice.de/vouchers/#/invoice/view/{invoice_id}"
-    logger.info("Generated deeplink | invoice_id=%s url=%s", invoice_id, url)
-    return f"Rechnung direkt öffnen: {url}"
-
-
-@tool
 def get_invoice_document(invoice_id: str, save_path: str = "") -> str:
     """Download the PDF document for a specific invoice from Lexoffice.
 
@@ -187,7 +172,7 @@ def upload_document(file_path: str) -> str:
 class LexofficeTool:
     """Collection of Lexoffice API tools for use with LangGraph agents."""
 
-    tools = [get_contacts, get_invoices, get_invoices_by_status, get_purchase_invoices, get_invoice_link, get_invoice_document, upload_document]
+    tools = [get_contacts, get_invoices, get_invoices_by_status, get_purchase_invoices, get_invoice_document, upload_document]
 
 
 def create_lexoffice_tools(api_key: str) -> list:
@@ -254,20 +239,6 @@ def create_lexoffice_tools(api_key: str) -> list:
         result = response.json().get("content", [])
         logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
         return result
-
-    @tool
-    def get_invoice_link(invoice_id: str) -> str:
-        """Get the direct deeplink URL to open a specific invoice in the Lexoffice web app.
-
-        Args:
-            invoice_id: The Lexoffice invoice ID (UUID).
-
-        Returns:
-            A URL string that opens the invoice directly in the Lexoffice web app.
-        """
-        url = f"https://app.lexoffice.de/vouchers/#/invoice/view/{invoice_id}"
-        logger.info("Generated deeplink | invoice_id=%s url=%s", invoice_id, url)
-        return f"Rechnung direkt öffnen: {url}"
 
     @tool
     def get_invoice_document(invoice_id: str, save_path: str = "") -> str:
@@ -346,4 +317,4 @@ def create_lexoffice_tools(api_key: str) -> list:
             logger.exception("Upload failed | filename=%s", path.name)
             return f"Upload failed: {e}"
 
-    return [get_contacts, get_invoices, get_invoices_by_status, get_purchase_invoices, get_invoice_link, get_invoice_document, upload_document]
+    return [get_contacts, get_invoices, get_invoices_by_status, get_purchase_invoices, get_invoice_document, upload_document]
