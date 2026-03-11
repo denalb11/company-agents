@@ -273,9 +273,16 @@ class CompanyTeamsBot:
     async def _handle_file_consent_invoke(self, turn_context: TurnContext) -> None:
         """Handle Teams fileConsent/invoke: upload file bytes when user accepts."""
         value = turn_context.activity.value or {}
-        if value.get("action") == "decline":
-            await turn_context.send_activity(Activity(type="invokeResponse", value={"status": 200}))
+        action = value.get("action", "")
+        logger.info("fileConsent/invoke | action=%s value=%s", action, value)
+
+        # Always respond to the invoke first so Teams doesn't show an error
+        invoke_response = Activity(type="invokeResponse", value={"status": 200})
+
+        if action == "decline":
+            await turn_context.send_activity(invoke_response)
             return
+
         context = value.get("context", {})
         file_path = pathlib.Path(context.get("filePath", ""))
         upload_info = value.get("uploadInfo", {})
@@ -283,24 +290,35 @@ class CompanyTeamsBot:
         content_url: str = upload_info.get("contentUrl", "")
         unique_id: str = upload_info.get("uniqueId", "")
         file_type: str = upload_info.get("fileType", "pdf")
+
+        # Respond to invoke immediately before doing the upload
+        await turn_context.send_activity(invoke_response)
+
         if not file_path.exists() or not upload_url:
-            await turn_context.send_activity(Activity(type="invokeResponse", value={"status": 200}))
+            logger.error("File not found or no upload URL | path=%s url=%s", file_path, upload_url)
+            await turn_context.send_activity("Datei nicht gefunden für Upload.")
             return
+
         try:
             with open(file_path, "rb") as f:
                 data = f.read()
+            file_size = len(data)
             async with aiohttp.ClientSession() as session:
                 async with session.put(
                     upload_url,
                     data=data,
                     headers={
-                        "Content-Type": "application/octet-stream",
-                        "Content-Length": str(len(data)),
-                        "Content-Range": f"bytes 0-{len(data)-1}/{len(data)}",
+                        "Content-Type": "application/pdf",
+                        "Content-Length": str(file_size),
+                        "Content-Range": f"bytes 0-{file_size - 1}/{file_size}",
                     },
                 ) as resp:
+                    resp_body = await resp.text()
+                    logger.info("File PUT | status=%d body=%s", resp.status, resp_body[:200])
                     if resp.status not in (200, 201):
-                        logger.error("File PUT failed | status=%d", resp.status)
+                        await turn_context.send_activity(f"Upload fehlgeschlagen (HTTP {resp.status}).")
+                        return
+
             file_info = Attachment(
                 content_type="application/vnd.microsoft.teams.card.file.info",
                 name=file_path.name,
@@ -308,8 +326,7 @@ class CompanyTeamsBot:
                 content_url=content_url,
             )
             await turn_context.send_activity(Activity(type=ActivityTypes.message, attachments=[file_info]))
-            await turn_context.send_activity(Activity(type="invokeResponse", value={"status": 200}))
-            logger.info("File consent upload complete | filename=%s", file_path.name)
+            logger.info("File consent upload complete | filename=%s size=%d", file_path.name, file_size)
         except Exception as e:
             logger.exception("File consent upload failed | path=%s", file_path)
             await turn_context.send_activity(f"Fehler beim Datei-Upload: {e}")

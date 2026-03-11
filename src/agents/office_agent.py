@@ -29,9 +29,15 @@ class OfficeAgent:
         """Returns (agent_text_response, list_of_pdf_paths)."""
         result = self.agent.invoke({"messages": [("user", message)]})
         text = result["messages"][-1].content
-        # Scan all ToolMessages in the conversation for PDF_READY markers
+        # Scan ToolMessages only (type=="tool") for PDF_READY markers, deduplicated
+        seen = set()
         pdf_paths = []
         for msg in result["messages"]:
+            if getattr(msg, "type", None) != "tool":
+                continue
             content = msg.content if isinstance(msg.content, str) else ""
-            pdf_paths.extend(re.findall(r"PDF_READY:(\S+\.pdf)", content))
+            for p in re.findall(r"PDF_READY:(\S+\.pdf)", content):
+                if p not in seen:
+                    seen.add(p)
+                    pdf_paths.append(p)
         return text, pdf_paths
