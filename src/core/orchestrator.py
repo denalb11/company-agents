@@ -20,6 +20,6 @@ class Orchestrator:
             self._agents[company_key] = OfficeAgent(tools=tools, company_name=company_name)
         return self._agents[company_key]
 
-    def run(self, message: str, company_key: str | None = None) -> str:
-        """Process a user message and return the agent's response."""
+    def run(self, message: str, company_key: str | None = None) -> tuple[str, list[str]]:
+        """Process a user message. Returns (text_response, list_of_pdf_paths)."""
         return self._get_agent(company_key).run(message)

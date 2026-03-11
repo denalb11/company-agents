@@ -31,15 +31,6 @@ from src.core.orchestrator import Orchestrator
 logger = logging.getLogger(__name__)
 
 
-def _extract_pdf_markers(text: str) -> tuple[str, list[str]]:
-    """Extract PDF_READY:<path> markers from agent output.
-
-    Returns (cleaned_text, list_of_pdf_paths).
-    """
-    pdf_paths = re.findall(r"PDF_READY:(\S+\.pdf)", text)
-    clean = re.sub(r"PDF_READY:\S+\.pdf\s*", "", text).strip()
-    return clean, pdf_paths
-
 
 def _user_id(activity: Activity) -> str:
     return activity.from_property.id if activity.from_property else "unknown"
@@ -121,8 +112,10 @@ class CompanyTeamsBot:
                 if pending["type"] == "query":
                     logger.info("Pending query resolved | user=%s company=%s", user_id, company_key)
                     await turn_context.send_activity("Ihre Anfrage wird verarbeitet, bitte warten …")
-                    response = await self._run_agent(pending["text"], company_key)
+                    response, pdf_paths = await self._run_agent(pending["text"], company_key)
                     await turn_context.send_activity(response)
+                    for pdf_path in pdf_paths:
+                        await self._send_file_consent_card(turn_context, pathlib.Path(pdf_path))
                 elif pending["type"] == "upload":
                     logger.info("Pending upload resolved | user=%s company=%s", user_id, company_key)
                     await self._process_upload(turn_context, pending["file_path"], pending["filename"], company_key)
@@ -197,11 +190,9 @@ class CompanyTeamsBot:
             logger.error("Failed to send processing message: %s", e)
 
         try:
-            response = await self._run_agent(text, company_key)
-            logger.info("Agent response ready, length=%d", len(response))
-            # Strip PDF_READY markers before sending text to user
-            clean_response, pdf_paths = _extract_pdf_markers(response)
-            await turn_context.send_activity(clean_response or "PDF wurde heruntergeladen.")
+            response, pdf_paths = await self._run_agent(text, company_key)
+            logger.info("Agent response ready, length=%d pdf_count=%d", len(response), len(pdf_paths))
+            await turn_context.send_activity(response)
             logger.info("Sent agent response to user")
             for pdf_path in pdf_paths:
                 await self._send_file_consent_card(turn_context, pathlib.Path(pdf_path))
@@ -251,12 +242,14 @@ class CompanyTeamsBot:
             f"{file_path}. Dateiname: {filename}. "
             f"Bitte verarbeite diese Datei entsprechend."
         )
-        response = await self._run_agent(agent_message, company_key)
+        response, pdf_paths = await self._run_agent(agent_message, company_key)
         if "Document ID:" in response:
             match = re.search(r"Document ID:\s*(\S+)", response)
             if match:
                 logger.info("Lexoffice upload confirmed | filename=%s document_id=%s", filename, match.group(1))
         await turn_context.send_activity(response)
+        for pdf_path in pdf_paths:
+            await self._send_file_consent_card(turn_context, pathlib.Path(pdf_path))
 
     async def _send_file_consent_card(self, turn_context: TurnContext, file_path: pathlib.Path) -> None:
         """Send a Teams file consent card (personal chat only)."""
@@ -334,8 +327,8 @@ class CompanyTeamsBot:
     # Helpers
     # ------------------------------------------------------------------
 
-    async def _run_agent(self, message: str, company_key: str | None = None) -> str:
-        """Run the synchronous orchestrator in a thread pool to avoid blocking."""
+    async def _run_agent(self, message: str, company_key: str | None = None) -> tuple[str, list[str]]:
+        """Run the synchronous orchestrator in a thread pool. Returns (text, pdf_paths)."""
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self.orchestrator.run, message, company_key)
 
