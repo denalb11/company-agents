@@ -117,10 +117,13 @@ class CompanyTeamsBot:
                     logger.info("Pending query resolved | user=%s company=%s", user_id, company_key)
                     self._last_company[user_id] = company_key
                     await turn_context.send_activity("Ihre Anfrage wird verarbeitet, bitte warten …")
-                    response, pdf_paths = await self._run_agent(pending["text"], company_key, user_id=user_id)
-                    await turn_context.send_activity(response)
-                    for pdf_path in pdf_paths:
-                        await self._send_pdf_link(turn_context, pathlib.Path(pdf_path))
+                    try:
+                        response, pdf_paths = await self._run_agent(pending["text"], company_key, user_id=user_id)
+                        await turn_context.send_activity(response)
+                        await self._send_pdf_links(turn_context, pdf_paths)
+                    except Exception as e:
+                        logger.error("Error in pending query handler: %s", e)
+                        await turn_context.send_activity(f"Fehler bei der Verarbeitung: {e}")
                 elif pending["type"] == "upload":
                     logger.info("Pending upload resolved | user=%s company=%s", user_id, company_key)
                     await self._process_upload(turn_context, pending["file_path"], pending["filename"], company_key)
@@ -204,8 +207,7 @@ class CompanyTeamsBot:
             logger.info("Agent response ready, length=%d pdf_count=%d", len(response), len(pdf_paths))
             await turn_context.send_activity(response)
             logger.info("Sent agent response to user")
-            for pdf_path in pdf_paths:
-                await self._send_pdf_link(turn_context, pathlib.Path(pdf_path))
+            await self._send_pdf_links(turn_context, pdf_paths)
         except Exception as e:
             logger.error("Failed to send agent response: %s", e)
 
@@ -261,6 +263,22 @@ class CompanyTeamsBot:
         await turn_context.send_activity(response)
         for pdf_path in pdf_paths:
             await self._send_pdf_link(turn_context, pathlib.Path(pdf_path))
+
+    async def _send_pdf_links(self, turn_context: TurnContext, pdf_paths: list[str], max_files: int = 5) -> None:
+        """Send up to max_files PDF attachments; inform user if there are more."""
+        if not pdf_paths:
+            return
+        to_send = pdf_paths[:max_files]
+        for p in to_send:
+            try:
+                await self._send_pdf_link(turn_context, pathlib.Path(p))
+            except Exception as e:
+                logger.error("Failed to send PDF link for %s: %s", p, e)
+        if len(pdf_paths) > max_files:
+            remaining = len(pdf_paths) - max_files
+            await turn_context.send_activity(
+                f"({remaining} weitere PDFs vorhanden — bitte spezifischer anfragen)"
+            )
 
     async def _send_pdf_link(self, turn_context: TurnContext, file_path: pathlib.Path) -> None:
         """Send PDF as a file attachment in the Teams chat."""
