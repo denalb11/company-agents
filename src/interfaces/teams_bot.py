@@ -23,7 +23,7 @@ from typing import Optional
 import aiohttp
 from aiohttp import web
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
-from botbuilder.schema import Activity, ActivityTypes
+from botbuilder.schema import Activity, ActivityTypes, Attachment
 
 from src.core.config import CHAT_PREFIX_MAP, get_allowed_companies, get_company_for_channel, get_company_for_prefix
 from src.core.orchestrator import Orchestrator
@@ -263,15 +263,20 @@ class CompanyTeamsBot:
             await self._send_pdf_link(turn_context, pathlib.Path(pdf_path))
 
     async def _send_pdf_link(self, turn_context: TurnContext, file_path: pathlib.Path) -> None:
-        """Send a direct HTTPS download link for the PDF."""
+        """Send PDF as a file attachment in the Teams chat."""
         if not file_path.exists():
             logger.warning("PDF not found: %s", file_path)
             return
         base_url = os.environ.get("BOT_BASE_URL", "https://bot.yunne.de").rstrip("/")
         url = f"{base_url}/downloads/{file_path.name}"
         size_kb = file_path.stat().st_size // 1024
-        logger.info("Sending PDF download link | url=%s", url)
-        await turn_context.send_activity(f"[{file_path.stem}.pdf]({url}) ({size_kb} KB)")
+        logger.info("Sending PDF attachment | url=%s size=%dKB", url, size_kb)
+        attachment = Attachment(
+            content_type="application/pdf",
+            name=file_path.name,
+            content_url=url,
+        )
+        await turn_context.send_activity(Activity(type=ActivityTypes.message, attachments=[attachment]))
 
 
     async def _handle_file_attachment(self, turn_context: TurnContext, attachment, company_key: str | None = None) -> None:
