@@ -24,7 +24,7 @@ from aiohttp import web
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
 from botbuilder.schema import Activity, ActivityTypes
 
-from src.core.config import get_company_for_channel, get_company_for_prefix
+from src.core.config import CHAT_PREFIX_MAP, get_company_for_channel, get_company_for_prefix
 from src.core.orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,8 @@ class CompanyTeamsBot:
     def __init__(self, orchestrator: Orchestrator):
         self.orchestrator = orchestrator
         self._allowed_tenant: Optional[str] = os.environ.get("AZURE_TENANT_ID", "").strip() or None
+        # Pending state per user: {user_id: {"type": "query"|"upload", "text"|"file_path": ...}}
+        self._pending: dict[str, dict] = {}
 
     # ------------------------------------------------------------------
     # Activity dispatcher
@@ -93,6 +95,27 @@ class CompanyTeamsBot:
                 )
                 return
 
+        user_id = _user_id(activity)
+
+        # --- Pending state: user is answering a company question ---
+        if user_id in self._pending:
+            text = (activity.text or "").strip()
+            company_key = CHAT_PREFIX_MAP.get(text.lower())
+            if company_key:
+                pending = self._pending.pop(user_id)
+                if pending["type"] == "query":
+                    logger.info("Pending query resolved | user=%s company=%s", user_id, company_key)
+                    await turn_context.send_activity("Ihre Anfrage wird verarbeitet, bitte warten …")
+                    response = await self._run_agent(pending["text"], company_key)
+                    await turn_context.send_activity(response)
+                elif pending["type"] == "upload":
+                    logger.info("Pending upload resolved | user=%s company=%s", user_id, company_key)
+                    await self._process_upload(turn_context, pending["file_path"], pending["filename"], company_key)
+                return
+            else:
+                # Invalid answer — clear state and continue normally
+                self._pending.pop(user_id, None)
+
         # --- File / attachment ---
         if activity.attachments:
             for attachment in activity.attachments:
@@ -100,14 +123,16 @@ class CompanyTeamsBot:
                     channel_name = self._extract_channel_name(activity)
                     company_key = get_company_for_channel(channel_name or "")
                     if not company_key:
-                        await turn_context.send_activity(
-                            "Für welches Unternehmen soll die Datei hochgeladen werden?\n\n"
-                            "Bitte sende die Datei erneut mit einem Prefix:\n"
-                            "• **ms:** multiScout\n"
-                            "• **dp:** Dümpelfeld Partners\n"
-                            "• **nao:** Nao Intelligence\n\n"
-                            "Beispiel: Schreibe zuerst `ms:` und hänge dann die Datei an."
-                        )
+                        # Download first, then ask which company
+                        file_path, filename = await self._download_attachment(turn_context, attachment)
+                        if file_path:
+                            self._pending[user_id] = {"type": "upload", "file_path": file_path, "filename": filename}
+                            await turn_context.send_activity(
+                                f"Datei **{filename}** empfangen. Für welches Unternehmen?\n\n"
+                                "• **ms** — multiScout\n"
+                                "• **dp** — Dümpelfeld Partners\n"
+                                "• **nao** — Nao Intelligence"
+                            )
                         return
                     await self._handle_file_attachment(turn_context, attachment, company_key)
                     return
@@ -123,18 +148,18 @@ class CompanyTeamsBot:
         channel_name = self._extract_channel_name(activity)
         company_key = get_company_for_channel(channel_name or "")
 
-        # Fallback: prefix-based routing for personal chat (e.g. "ms: zeige Rechnungen")
+        # Fallback: prefix-based routing (e.g. "ms: zeige Rechnungen")
         if not company_key:
             company_key, text = get_company_for_prefix(text)
 
-        # No company detected → ask user
+        # No company detected → ask and remember the query
         if not company_key:
+            self._pending[user_id] = {"type": "query", "text": text}
             await turn_context.send_activity(
-                "Für welches Unternehmen soll ich arbeiten? Bitte Prefix verwenden:\n\n"
-                "• **ms:** multiScout\n"
-                "• **dp:** Dümpelfeld Partners\n"
-                "• **nao:** Nao Intelligence\n\n"
-                "Beispiel: `ms: zeige alle Rechnungen`"
+                "Für welches Unternehmen?\n\n"
+                "• **ms** — multiScout\n"
+                "• **dp** — Dümpelfeld Partners\n"
+                "• **nao** — Nao Intelligence"
             )
             return
 
@@ -163,76 +188,60 @@ class CompanyTeamsBot:
     # File handling
     # ------------------------------------------------------------------
 
-    async def _handle_file_attachment(self, turn_context: TurnContext, attachment, company_key: str | None = None) -> None:
-        """Download a Teams file attachment, save to uploads/, pass path to agent."""
+    async def _download_attachment(self, turn_context: TurnContext, attachment) -> tuple:
+        """Download attachment to uploads/ dir. Returns (file_path, filename) or (None, None)."""
         content = attachment.content or {}
         download_url: Optional[str] = (
             content.get("downloadUrl") if isinstance(content, dict) else None
         )
-
         if not download_url:
             await turn_context.send_activity(
                 "Die Datei konnte nicht heruntergeladen werden: keine Download-URL vorhanden."
             )
-            return
+            return None, None
 
-        filename: str = (
-            attachment.name
-            or f"upload_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        )
+        filename: str = attachment.name or f"upload_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         file_path = UPLOADS_DIR / filename
 
-        # Download the file
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(download_url) as resp:
                     if resp.status != 200:
-                        await turn_context.send_activity(
-                            f"Datei-Download fehlgeschlagen (HTTP {resp.status})."
-                        )
-                        return
+                        await turn_context.send_activity(f"Datei-Download fehlgeschlagen (HTTP {resp.status}).")
+                        return None, None
                     data = await resp.read()
-
             with open(file_path, "wb") as f:
                 f.write(data)
-
-            logger.info(
-                "File upload received | user=%s filename=%s size=%d bytes",
-                _user_id(turn_context.activity),
-                filename,
-                len(data),
-            )
+            logger.info("File downloaded | user=%s filename=%s size=%d bytes", _user_id(turn_context.activity), filename, len(data))
+            return str(file_path), filename
         except Exception as exc:
             logger.exception("Failed to download attachment | filename=%s", filename)
-            await turn_context.send_activity(
-                f"Beim Herunterladen der Datei ist ein Fehler aufgetreten: {exc}"
-            )
-            return
+            await turn_context.send_activity(f"Beim Herunterladen der Datei ist ein Fehler aufgetreten: {exc}")
+            return None, None
 
-        await turn_context.send_activity(
-            f"Datei '{filename}' wurde empfangen und gespeichert. Verarbeitung läuft …"
-        )
-
-        # Pass the saved file path to the agent
+    async def _process_upload(self, turn_context: TurnContext, file_path: str, filename: str, company_key: str) -> None:
+        """Pass a downloaded file to the agent for Lexoffice upload."""
+        await turn_context.send_activity(f"Datei wird bei **{company_key}** hochgeladen …")
         agent_message = (
             f"Eine Datei wurde hochgeladen und unter folgendem Pfad gespeichert: "
-            f"{file_path.resolve()}. Dateiname: {filename}. "
+            f"{file_path}. Dateiname: {filename}. "
             f"Bitte verarbeite diese Datei entsprechend."
         )
         response = await self._run_agent(agent_message, company_key)
-
-        # Log the Lexoffice document ID if the agent confirms a successful upload
         if "Document ID:" in response:
             import re
             match = re.search(r"Document ID:\s*(\S+)", response)
             if match:
-                logger.info(
-                    "Lexoffice upload confirmed | filename=%s document_id=%s",
-                    filename,
-                    match.group(1),
-                )
-
+                logger.info("Lexoffice upload confirmed | filename=%s document_id=%s", filename, match.group(1))
         await turn_context.send_activity(response)
+
+    async def _handle_file_attachment(self, turn_context: TurnContext, attachment, company_key: str | None = None) -> None:
+        """Download a Teams file attachment, save to uploads/, pass path to agent."""
+        file_path, filename = await self._download_attachment(turn_context, attachment)
+        if not file_path:
+            return
+
+        await self._process_upload(turn_context, file_path, filename, company_key)
 
     # ------------------------------------------------------------------
     # Helpers
