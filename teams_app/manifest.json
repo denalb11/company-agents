@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
   "manifestVersion": "1.17",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "id": "1b3b67da-f48d-41cd-a4e7-5fcab3b929af",
   "developer": {
     "name": "Duempelfeld & Partners GmbH",
-    "websiteUrl": "https://public-bikes-prove.loca.lt",
-    "privacyUrl": "https://public-bikes-prove.loca.lt/privacy",
-    "termsOfUseUrl": "https://public-bikes-prove.loca.lt/terms"
+    "websiteUrl": "https://github.com/denalb11/company-agents",
+    "privacyUrl": "https://github.com/denalb11/company-agents",
+    "termsOfUseUrl": "https://github.com/denalb11/company-agents"
   },
   "name": {
     "short": "Company Agents Bot",
@@ -46,6 +46,6 @@
     }
   ],
   "validDomains": [
-    "public-bikes-prove.loca.lt"
+    "bot.yunne.de"
   ]
 }

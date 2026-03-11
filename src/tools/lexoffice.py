@@ -91,6 +91,39 @@ def get_purchase_invoices() -> list:
 
 
 @tool
+def get_invoice_document(invoice_id: str, save_path: str = "") -> str:
+    """Download the PDF document for a specific invoice from Lexoffice.
+
+    Args:
+        invoice_id: The Lexoffice invoice ID (UUID).
+        save_path: Optional path to save the PDF file. If empty, saves to uploads/<invoice_id>.pdf.
+
+    Returns:
+        A success message with the saved file path, or an error message.
+    """
+    endpoint = f"/invoices/{invoice_id}/document"
+    logger.info("API call | GET %s", endpoint)
+    try:
+        response = requests.get(
+            f"{BASE_URL}{endpoint}",
+            headers=_get_auth_header(),
+        )
+        response.raise_for_status()
+        out_path = Path(save_path) if save_path else Path("uploads") / f"{invoice_id}.pdf"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, "wb") as f:
+            f.write(response.content)
+        logger.info("Invoice PDF downloaded | invoice_id=%s path=%s size=%d bytes", invoice_id, out_path, len(response.content))
+        return f"PDF gespeichert unter: {out_path} ({len(response.content)} Bytes)"
+    except requests.HTTPError as e:
+        logger.error("Invoice PDF download failed | invoice_id=%s status=%d response=%s", invoice_id, e.response.status_code, e.response.text)
+        return f"Download fehlgeschlagen (HTTP {e.response.status_code}): {e.response.text}"
+    except Exception as e:
+        logger.exception("Invoice PDF download failed | invoice_id=%s", invoice_id)
+        return f"Download fehlgeschlagen: {e}"
+
+
+@tool
 def upload_document(file_path: str) -> str:
     """Upload a document file to Lexoffice for review.
 
@@ -139,7 +172,7 @@ def upload_document(file_path: str) -> str:
 class LexofficeTool:
     """Collection of Lexoffice API tools for use with LangGraph agents."""
 
-    tools = [get_contacts, get_invoices, get_invoices_by_status, get_purchase_invoices, upload_document]
+    tools = [get_contacts, get_invoices, get_invoices_by_status, get_purchase_invoices, get_invoice_document, upload_document]
 
 
 def create_lexoffice_tools(api_key: str) -> list:
@@ -208,6 +241,38 @@ def create_lexoffice_tools(api_key: str) -> list:
         return result
 
     @tool
+    def get_invoice_document(invoice_id: str, save_path: str = "") -> str:
+        """Download the PDF document for a specific invoice from Lexoffice.
+
+        Args:
+            invoice_id: The Lexoffice invoice ID (UUID).
+            save_path: Optional path to save the PDF file. If empty, saves to uploads/<invoice_id>.pdf.
+
+        Returns:
+            A success message with the saved file path, or an error message.
+        """
+        endpoint = f"/invoices/{invoice_id}/document"
+        logger.info("API call | GET %s", endpoint)
+        try:
+            response = requests.get(
+                f"{BASE_URL}{endpoint}",
+                headers=_auth_header(),
+            )
+            response.raise_for_status()
+            out_path = Path(save_path) if save_path else Path("uploads") / f"{invoice_id}.pdf"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(out_path, "wb") as f:
+                f.write(response.content)
+            logger.info("Invoice PDF downloaded | invoice_id=%s path=%s size=%d bytes", invoice_id, out_path, len(response.content))
+            return f"PDF gespeichert unter: {out_path} ({len(response.content)} Bytes)"
+        except requests.HTTPError as e:
+            logger.error("Invoice PDF download failed | invoice_id=%s status=%d response=%s", invoice_id, e.response.status_code, e.response.text)
+            return f"Download fehlgeschlagen (HTTP {e.response.status_code}): {e.response.text}"
+        except Exception as e:
+            logger.exception("Invoice PDF download failed | invoice_id=%s", invoice_id)
+            return f"Download fehlgeschlagen: {e}"
+
+    @tool
     def upload_document(file_path: str) -> str:
         """Upload a document file to Lexoffice for review.
 
@@ -252,4 +317,4 @@ def create_lexoffice_tools(api_key: str) -> list:
             logger.exception("Upload failed | filename=%s", path.name)
             return f"Upload failed: {e}"
 
-    return [get_contacts, get_invoices, get_invoices_by_status, get_purchase_invoices, upload_document]
+    return [get_contacts, get_invoices, get_invoices_by_status, get_purchase_invoices, get_invoice_document, upload_document]
