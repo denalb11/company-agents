@@ -23,6 +23,32 @@ CHANNEL_MAP = {
     "nao": "nao",
 }
 
+# Mapping: Chat-Prefix (lowercase, ohne Doppelpunkt) → company key
+CHAT_PREFIX_MAP = {
+    "ms": "multiscout",
+    "multiscout": "multiscout",
+    "nao": "nao",
+    "dp": "duempelfeld",
+    "dümpelfeld": "duempelfeld",
+    "duempelfeld": "duempelfeld",
+    "dümpel": "duempelfeld",
+}
+
+
+def get_company_for_prefix(text: str) -> tuple[str | None, str]:
+    """Extracts company key and cleaned message from a prefixed text.
+
+    Returns (company_key, cleaned_text).
+    E.g. "ms: zeige Rechnungen" → ("multiscout", "zeige Rechnungen")
+    """
+    if ":" in text:
+        prefix, _, rest = text.partition(":")
+        prefix_lower = prefix.strip().lower()
+        company_key = CHAT_PREFIX_MAP.get(prefix_lower)
+        if company_key:
+            return company_key, rest.strip()
+    return None, text
+
 
 def get_company_for_channel(channel_name: str) -> str | None:
     """Returns company key for a Teams channel name (substring match), or None."""

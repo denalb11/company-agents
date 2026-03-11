@@ -24,7 +24,7 @@ from aiohttp import web
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
 from botbuilder.schema import Activity, ActivityTypes
 
-from src.core.config import get_company_for_channel
+from src.core.config import get_company_for_channel, get_company_for_prefix
 from src.core.orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
@@ -112,6 +112,10 @@ class CompanyTeamsBot:
 
         channel_name = self._extract_channel_name(activity)
         company_key = get_company_for_channel(channel_name or "")
+
+        # Fallback: prefix-based routing for personal chat (e.g. "ms: zeige Rechnungen")
+        if not company_key:
+            company_key, text = get_company_for_prefix(text)
 
         logger.info(
             "Text message | user=%s length=%d channel=%s company=%s",
