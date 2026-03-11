@@ -247,7 +247,7 @@ class CompanyTeamsBot:
         await turn_context.send_activity(response)
 
     async def _send_pdf_if_present(self, turn_context: TurnContext, agent_response: str) -> None:
-        """If the agent response mentions a saved PDF path, send download link + file consent card."""
+        """If the agent response mentions a saved PDF path, send a Teams file consent card."""
         match = re.search(r"PDF gespeichert unter:\s*(\S+\.pdf)", agent_response)
         if not match:
             return
@@ -255,14 +255,9 @@ class CompanyTeamsBot:
         if not file_path.exists():
             logger.warning("PDF file not found: %s", file_path)
             return
-        base_url = os.environ.get("BOT_BASE_URL", "https://bot.yunne.de").rstrip("/")
-        download_url = f"{base_url}/downloads/{file_path.name}"
-        logger.info("Sending PDF download link | url=%s", download_url)
-        await turn_context.send_activity(f"PDF herunterladen: {download_url}")
-        # In personal (1:1) chats also send a Teams file consent card so the PDF can land directly in chat
-        conversation_type = (turn_context.activity.conversation.conversation_type or "").lower()
-        if conversation_type == "personal":
-            await self._send_file_consent_card(turn_context, file_path)
+        conv_type = (turn_context.activity.conversation.conversation_type or "").lower()
+        logger.info("PDF found, sending file consent card | conv_type='%s'", conv_type)
+        await self._send_file_consent_card(turn_context, file_path)
 
     async def _send_file_consent_card(self, turn_context: TurnContext, file_path: pathlib.Path) -> None:
         """Send a Teams file consent card (personal chat only)."""
