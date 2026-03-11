@@ -319,13 +319,6 @@ class CompanyTeamsBot:
                         await turn_context.send_activity(f"Upload fehlgeschlagen (HTTP {resp.status}).")
                         return
 
-            file_info = Attachment(
-                content_type="application/vnd.microsoft.teams.card.file.info",
-                name=file_path.name,
-                content={"uniqueId": unique_id, "fileType": file_type, "etag": unique_id},
-                content_url=content_url,
-            )
-            await turn_context.send_activity(Activity(type=ActivityTypes.message, attachments=[file_info]))
             logger.info("File consent upload complete | filename=%s size=%d", file_path.name, file_size)
         except Exception as e:
             logger.exception("File consent upload failed | path=%s", file_path)
