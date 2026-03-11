@@ -40,15 +40,28 @@ class OfficeAgent:
 
         result = self.agent.invoke({"messages": messages})
         text = result["messages"][-1].content
-        # Scan ToolMessages only for PDF_READY markers, deduplicated
+        # Scan ToolMessages for PDF_READY markers, deduplicated
         seen = set()
         pdf_paths = []
         for msg in result["messages"]:
-            if getattr(msg, "type", None) != "tool":
-                continue
-            content = msg.content if isinstance(msg.content, str) else ""
-            for p in re.findall(r"PDF_READY:(\S+\.pdf)", content):
-                if p not in seen:
-                    seen.add(p)
-                    pdf_paths.append(p)
+            msg_type = getattr(msg, "type", None)
+            # Extract text content regardless of format
+            raw = msg.content
+            if isinstance(raw, str):
+                content = raw
+            elif isinstance(raw, list):
+                content = " ".join(
+                    b if isinstance(b, str) else b.get("text", "") if isinstance(b, dict) else ""
+                    for b in raw
+                )
+            else:
+                content = ""
+            import logging as _log
+            _log.getLogger(__name__).debug("msg type=%s content_preview=%s", msg_type, content[:120])
+            if "PDF_READY:" in content:
+                _log.getLogger(__name__).info("PDF_READY found in msg type=%s", msg_type)
+                for p in re.findall(r"PDF_READY:(\S+\.pdf)", content):
+                    if p not in seen:
+                        seen.add(p)
+                        pdf_paths.append(p)
         return text, pdf_paths
