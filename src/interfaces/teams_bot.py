@@ -63,6 +63,12 @@ class CompanyTeamsBot:
         )
 
         if activity.type == ActivityTypes.message:
+            logger.info(
+                "Activity detail | conversation_type=%s service_url=%s channel_data=%s",
+                activity.conversation.conversation_type if activity.conversation else "?",
+                activity.service_url,
+                activity.channel_data,
+            )
             await self._on_message(turn_context)
         # Ignore other activity types (conversationUpdate, typing, etc.)
 
