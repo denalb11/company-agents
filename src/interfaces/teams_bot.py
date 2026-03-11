@@ -24,7 +24,7 @@ from aiohttp import web
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
 from botbuilder.schema import Activity, ActivityTypes
 
-from src.core.config import CHAT_PREFIX_MAP, get_company_for_channel, get_company_for_prefix
+from src.core.config import CHAT_PREFIX_MAP, get_allowed_companies, get_company_for_channel, get_company_for_prefix
 from src.core.orchestrator import Orchestrator
 
 logger = logging.getLogger(__name__)
@@ -103,6 +103,8 @@ class CompanyTeamsBot:
             company_key = CHAT_PREFIX_MAP.get(text.lower())
             if company_key:
                 pending = self._pending.pop(user_id)
+                if not await self._check_permission(turn_context, company_key):
+                    return
                 if pending["type"] == "query":
                     logger.info("Pending query resolved | user=%s company=%s", user_id, company_key)
                     await turn_context.send_activity("Ihre Anfrage wird verarbeitet, bitte warten …")
@@ -133,6 +135,8 @@ class CompanyTeamsBot:
                                 "• **dp** — Dümpelfeld Partners\n"
                                 "• **nao** — Nao Intelligence"
                             )
+                        return
+                    if not await self._check_permission(turn_context, company_key):
                         return
                     await self._handle_file_attachment(turn_context, attachment, company_key)
                     return
@@ -170,6 +174,9 @@ class CompanyTeamsBot:
             channel_name or "unknown",
             company_key or "default",
         )
+        if not await self._check_permission(turn_context, company_key):
+            return
+
         try:
             await turn_context.send_activity("Ihre Anfrage wird verarbeitet, bitte warten …")
             logger.info("Sent processing message to user")
@@ -251,6 +258,23 @@ class CompanyTeamsBot:
         """Run the synchronous orchestrator in a thread pool to avoid blocking."""
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self.orchestrator.run, message, company_key)
+
+    async def _check_permission(self, turn_context: TurnContext, company_key: str) -> bool:
+        """Returns True if the user is allowed to access the given company."""
+        aad_id = getattr(turn_context.activity.from_property, "aad_object_id", None) or ""
+        allowed = get_allowed_companies(aad_id)
+        if allowed == []:  # not in list at all
+            await turn_context.send_activity("Zugriff verweigert: Sie haben keine Berechtigung für diesen Bot.")
+            return False
+        if allowed is None:  # full access
+            return True
+        if company_key not in allowed:
+            names = {"duempelfeld": "Dümpelfeld Partners", "multiscout": "multiScout", "nao": "Nao Intelligence"}
+            await turn_context.send_activity(
+                f"Zugriff verweigert: Sie haben keinen Zugriff auf **{names.get(company_key, company_key)}**."
+            )
+            return False
+        return True
 
     @staticmethod
     def _extract_channel_name(activity: Activity) -> str | None:

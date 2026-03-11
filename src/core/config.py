@@ -1,5 +1,38 @@
 import os
 
+# User permissions: Azure AD Object ID → list of allowed company keys, or None = all companies
+# None means full access to all companies
+USER_PERMISSIONS: dict[str, list[str] | None] = {
+    # --- Deniz Albayrak (alle albayrak@ Accounts) → Vollzugriff ---
+    "0223b1ef-cc81-4eaa-8484-6189f6b40f1b": None,  # albayrak@duempelfeldpartners.com
+    "2fef1e21-2acd-4b6c-b285-310b0449bd6e": None,  # albayrak@multiscout.com
+    "45fe9502-6ed2-44b9-b4fc-49725f1e77e4": None,  # albayrak@apparelscout.com
+    "02c38fd5-c388-47d8-bee7-7e882595bf77": None,  # albayrak@procurement-interim.de
+    "005e5e05-ef66-457f-bbb4-685e03dad68b": None,  # albayrak@savify.ch
+    "c75e1806-e0e2-4440-9867-15a1ea475efd": None,  # albayrak2@multiscout.de
+    "a0a490ec-e90f-42ef-a707-5d3cf7023b06": None,  # scoutgroup albayrak
+    "1629e701-1988-4971-9d0e-02e1590a8f50": None,  # s.albayrak@multiscout.de
+    # --- Julia Wegen (alle wegen@ Accounts) → Vollzugriff ---
+    "9e017de4-4bc2-41fb-9ce3-fbfb8cb7e553": None,  # wegen@duempelfeldpartners.com
+    "e7eba269-e9ab-4cf1-8fc3-3a4c21a9d154": None,  # wegen@multiscout.de
+    "42de74c6-27d4-4346-bd9e-2db35cf406a3": None,  # juliawegen@apparelscout.com
+    # --- Dr. Patrick Dümpelfeld → Dümpelfeld + Nao ---
+    "ed3657be-768d-483e-9585-1f14c00decf6": ["duempelfeld", "nao"],  # duempelfeld@duempelfeldpartners.com
+    "6ed66c0e-2056-4ef5-8a11-b62a8dbc461f": ["duempelfeld", "nao"],  # duempelfeld@procurement-interim.de
+    "081e9a62-a2ab-4263-a2bf-4a11f02877d7": ["duempelfeld", "nao"],  # duempelfeld@savify.ch
+    "5b7de7b7-5fd6-4fee-89e3-435726a21980": ["duempelfeld", "nao"],  # duempelfeld@scoutgroup
+    # --- Ramón Romero → nur Dümpelfeld ---
+    "4f0adf15-67a0-45d2-96f5-4d539ca1a868": ["duempelfeld"],  # romero@duempelfeldpartners.com
+    "b44d5ab9-9ef8-48f0-940d-9d6863aab77d": ["duempelfeld"],  # romero@procurement-interim.de
+}
+
+
+def get_allowed_companies(aad_object_id: str) -> list[str] | None:
+    """Returns allowed company keys for a user, None = all, [] = no access."""
+    if aad_object_id not in USER_PERMISSIONS:
+        return []  # Not in list → no access
+    return USER_PERMISSIONS[aad_object_id]  # None = all, list = specific
+
 COMPANY_CONFIG = {
     "duempelfeld": {
         "name": "Dümpelfeld Partners",
