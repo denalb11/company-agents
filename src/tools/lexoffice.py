@@ -52,6 +52,32 @@ def get_invoices() -> list:
 
 
 @tool
+def get_invoices_by_status(status: str) -> list:
+    """Fetch invoices from Lexoffice filtered by payment status.
+
+    Args:
+        status: Payment status to filter by. Valid values:
+                'open' (offene Rechnungen),
+                'overdue' (überfällige Rechnungen),
+                'paid' (bezahlte Rechnungen),
+                'draft' (Entwürfe),
+                'voided' (stornierte Rechnungen),
+                'any' (alle).
+
+    Returns:
+        List of invoices matching the given status.
+    """
+    endpoint = "/voucherlist"
+    params = {"voucherType": "invoice", "voucherStatus": status}
+    logger.info("API call | GET %s params=%s", endpoint, params)
+    response = requests.get(f"{BASE_URL}{endpoint}", headers=_get_headers(), params=params)
+    response.raise_for_status()
+    result = response.json().get("content", [])
+    logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
+    return result
+
+
+@tool
 def get_purchase_invoices() -> list:
     """Fetch all purchase invoices (Eingangsrechnungen) from Lexoffice."""
     endpoint = "/voucherlist"
@@ -113,7 +139,7 @@ def upload_document(file_path: str) -> str:
 class LexofficeTool:
     """Collection of Lexoffice API tools for use with LangGraph agents."""
 
-    tools = [get_contacts, get_invoices, get_purchase_invoices, upload_document]
+    tools = [get_contacts, get_invoices, get_invoices_by_status, get_purchase_invoices, upload_document]
 
 
 def create_lexoffice_tools(api_key: str) -> list:
@@ -140,6 +166,28 @@ def create_lexoffice_tools(api_key: str) -> list:
         """Fetch all invoices from Lexoffice."""
         endpoint = "/voucherlist"
         params = {"voucherType": "invoice", "voucherStatus": "any"}
+        logger.info("API call | GET %s params=%s", endpoint, params)
+        response = requests.get(f"{BASE_URL}{endpoint}", headers=_headers(), params=params)
+        response.raise_for_status()
+        result = response.json().get("content", [])
+        logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
+        return result
+
+    @tool
+    def get_invoices_by_status(status: str) -> list:
+        """Fetch invoices from Lexoffice filtered by payment status.
+
+        Args:
+            status: Payment status to filter by. Valid values:
+                    'open' (offene Rechnungen),
+                    'overdue' (überfällige Rechnungen),
+                    'paid' (bezahlte Rechnungen),
+                    'draft' (Entwürfe),
+                    'voided' (stornierte Rechnungen),
+                    'any' (alle).
+        """
+        endpoint = "/voucherlist"
+        params = {"voucherType": "invoice", "voucherStatus": status}
         logger.info("API call | GET %s params=%s", endpoint, params)
         response = requests.get(f"{BASE_URL}{endpoint}", headers=_headers(), params=params)
         response.raise_for_status()
@@ -204,4 +252,4 @@ def create_lexoffice_tools(api_key: str) -> list:
             logger.exception("Upload failed | filename=%s", path.name)
             return f"Upload failed: {e}"
 
-    return [get_contacts, get_invoices, get_purchase_invoices, upload_document]
+    return [get_contacts, get_invoices, get_invoices_by_status, get_purchase_invoices, upload_document]
