@@ -46,11 +46,15 @@ UPLOADS_DIR.mkdir(exist_ok=True)
 class CompanyTeamsBot:
     """Handles incoming Teams activities and delegates to the Orchestrator."""
 
+    _MAX_HISTORY = 10  # max exchanges (user+assistant pairs) to keep per user
+
     def __init__(self, orchestrator: Orchestrator):
         self.orchestrator = orchestrator
         self._allowed_tenant: Optional[str] = os.environ.get("AZURE_TENANT_ID", "").strip() or None
         # Pending state per user: {user_id: {"type": "query"|"upload", "text"|"file_path": ...}}
         self._pending: dict[str, dict] = {}
+        # Conversation history per user: {user_id: [(user_msg, assistant_msg), ...]}
+        self._history: dict[str, list[tuple[str, str]]] = {}
 
     # ------------------------------------------------------------------
     # Activity dispatcher
@@ -112,7 +116,7 @@ class CompanyTeamsBot:
                 if pending["type"] == "query":
                     logger.info("Pending query resolved | user=%s company=%s", user_id, company_key)
                     await turn_context.send_activity("Ihre Anfrage wird verarbeitet, bitte warten …")
-                    response, pdf_paths = await self._run_agent(pending["text"], company_key)
+                    response, pdf_paths = await self._run_agent(pending["text"], company_key, user_id=user_id)
                     await turn_context.send_activity(response)
                     for pdf_path in pdf_paths:
                         await self._send_file_consent_card(turn_context, pathlib.Path(pdf_path))
@@ -190,7 +194,7 @@ class CompanyTeamsBot:
             logger.error("Failed to send processing message: %s", e)
 
         try:
-            response, pdf_paths = await self._run_agent(text, company_key)
+            response, pdf_paths = await self._run_agent(text, company_key, user_id=user_id)
             logger.info("Agent response ready, length=%d pdf_count=%d", len(response), len(pdf_paths))
             await turn_context.send_activity(response)
             logger.info("Sent agent response to user")
@@ -242,7 +246,8 @@ class CompanyTeamsBot:
             f"{file_path}. Dateiname: {filename}. "
             f"Bitte verarbeite diese Datei entsprechend."
         )
-        response, pdf_paths = await self._run_agent(agent_message, company_key)
+        user_id = _user_id(turn_context.activity)
+        response, pdf_paths = await self._run_agent(agent_message, company_key, user_id=user_id)
         if "Document ID:" in response:
             match = re.search(r"Document ID:\s*(\S+)", response)
             if match:
@@ -337,10 +342,22 @@ class CompanyTeamsBot:
     # Helpers
     # ------------------------------------------------------------------
 
-    async def _run_agent(self, message: str, company_key: str | None = None) -> tuple[str, list[str]]:
+    async def _run_agent(self, message: str, company_key: str | None = None, user_id: str = "") -> tuple[str, list[str]]:
         """Run the synchronous orchestrator in a thread pool. Returns (text, pdf_paths)."""
+        history = self._history.get(user_id, [])
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self.orchestrator.run, message, company_key)
+        result = await loop.run_in_executor(None, self.orchestrator.run, message, company_key, history)
+        text, pdf_paths = result
+        # Store exchange in history
+        if user_id:
+            self._update_history(user_id, message, text)
+        return text, pdf_paths
+
+    def _update_history(self, user_id: str, user_msg: str, assistant_msg: str) -> None:
+        history = self._history.setdefault(user_id, [])
+        history.append((user_msg, assistant_msg))
+        if len(history) > self._MAX_HISTORY:
+            history.pop(0)
 
     async def _check_permission(self, turn_context: TurnContext, company_key: str) -> bool:
         """Returns True if the user is allowed to access the given company."""

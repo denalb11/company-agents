@@ -25,11 +25,22 @@ class OfficeAgent:
             prompt=SystemMessage(content=prompt),
         )
 
-    def run(self, message: str) -> tuple[str, list[str]]:
-        """Returns (agent_text_response, list_of_pdf_paths)."""
-        result = self.agent.invoke({"messages": [("user", message)]})
+    def run(self, message: str, history: list[tuple[str, str]] | None = None) -> tuple[str, list[str]]:
+        """Returns (agent_text_response, list_of_pdf_paths).
+
+        Args:
+            message: The current user message.
+            history: Optional list of (user_msg, assistant_msg) tuples from prior turns.
+        """
+        messages = []
+        for user_msg, assistant_msg in (history or []):
+            messages.append(("user", user_msg))
+            messages.append(("assistant", assistant_msg))
+        messages.append(("user", message))
+
+        result = self.agent.invoke({"messages": messages})
         text = result["messages"][-1].content
-        # Scan ToolMessages only (type=="tool") for PDF_READY markers, deduplicated
+        # Scan ToolMessages only for PDF_READY markers, deduplicated
         seen = set()
         pdf_paths = []
         for msg in result["messages"]:
