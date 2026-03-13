@@ -152,7 +152,8 @@ class CompanyTeamsBot:
                                 f"Datei **{filename}** empfangen. Für welches Unternehmen?\n\n"
                                 "• **ms** — multiScout\n"
                                 "• **dp** — Dümpelfeld Partners\n"
-                                "• **nao** — Nao Intelligence"
+                                "• **nao** — Nao Intelligence\n"
+                                "• **sv** — Savify"
                             )
                         return
                     if not await self._check_permission(turn_context, company_key):
@@ -184,7 +185,8 @@ class CompanyTeamsBot:
                 "Für welches Unternehmen?\n\n"
                 "• **ms** — multiScout\n"
                 "• **dp** — Dümpelfeld Partners\n"
-                "• **nao** — Nao Intelligence"
+                "• **nao** — Nao Intelligence\n"
+                "• **sv** — Savify"
             )
             return
 
@@ -371,7 +373,7 @@ class CompanyTeamsBot:
         if allowed is None:  # full access
             return True
         if company_key not in allowed:
-            names = {"duempelfeld": "Dümpelfeld Partners", "multiscout": "multiScout", "nao": "Nao Intelligence"}
+            names = {"duempelfeld": "Dümpelfeld Partners", "multiscout": "multiScout", "nao": "Nao Intelligence", "savify": "Savify"}
             await turn_context.send_activity(
                 f"Zugriff verweigert: Sie haben keinen Zugriff auf **{names.get(company_key, company_key)}**."
             )

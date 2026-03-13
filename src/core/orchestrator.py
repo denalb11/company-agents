@@ -1,5 +1,6 @@
 from src.agents.office_agent import OfficeAgent
-from src.core.config import COMPANY_CONFIG, get_api_key_for_company
+from src.core.config import COMPANY_CONFIG, get_abaninja_credentials, get_api_key_for_company
+from src.tools.abaninja import create_abaninja_tools
 from src.tools.lexoffice import LexofficeTool, create_lexoffice_tools
 
 
@@ -14,9 +15,15 @@ class Orchestrator:
         if not company_key:
             return self._default_agent
         if company_key not in self._agents:
-            api_key = get_api_key_for_company(company_key)
-            tools = create_lexoffice_tools(api_key)
-            company_name = COMPANY_CONFIG[company_key]["name"]
+            config = COMPANY_CONFIG[company_key]
+            company_name = config["name"]
+            system = config.get("system", "lexoffice")
+            if system == "abaninja":
+                api_key, account_uuid = get_abaninja_credentials(company_key)
+                tools = create_abaninja_tools(api_key, account_uuid)
+            else:
+                api_key = get_api_key_for_company(company_key)
+                tools = create_lexoffice_tools(api_key)
             self._agents[company_key] = OfficeAgent(tools=tools, company_name=company_name)
         return self._agents[company_key]
 

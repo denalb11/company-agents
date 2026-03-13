@@ -36,15 +36,24 @@ def get_allowed_companies(aad_object_id: str) -> list[str] | None:
 COMPANY_CONFIG = {
     "duempelfeld": {
         "name": "Dümpelfeld Partners",
+        "system": "lexoffice",
         "api_key_env": "LEXOFFICE_API_KEY_DUEMPELFELD",
     },
     "multiscout": {
         "name": "multiScout",
+        "system": "lexoffice",
         "api_key_env": "LEXOFFICE_API_KEY_MULTISCOUT",
     },
     "nao": {
         "name": "Nao Intelligence",
+        "system": "lexoffice",
         "api_key_env": "LEXOFFICE_API_KEY_NAO",
+    },
+    "savify": {
+        "name": "Savify",
+        "system": "abaninja",
+        "api_key_env": "ABANINJA_API_KEY_SAVIFY",
+        "account_uuid_env": "ABANINJA_ACCOUNT_UUID_SAVIFY",
     },
 }
 
@@ -54,6 +63,7 @@ CHANNEL_MAP = {
     "dümpelfeld": "duempelfeld",
     "multiscout": "multiscout",
     "nao": "nao",
+    "savify": "savify",
 }
 
 # Mapping: Chat-Prefix (lowercase, ohne Doppelpunkt) → company key
@@ -65,6 +75,8 @@ CHAT_PREFIX_MAP = {
     "dümpelfeld": "duempelfeld",
     "duempelfeld": "duempelfeld",
     "dümpel": "duempelfeld",
+    "sv": "savify",
+    "savify": "savify",
 }
 
 
@@ -93,7 +105,7 @@ def get_company_for_channel(channel_name: str) -> str | None:
 
 
 def get_api_key_for_company(company_key: str) -> str:
-    """Returns Lexoffice API key for a company key. Raises if not configured."""
+    """Returns API key for a company. Raises if not configured."""
     config = COMPANY_CONFIG.get(company_key)
     if not config:
         raise ValueError(f"Unknown company key: '{company_key}'")
@@ -102,3 +114,17 @@ def get_api_key_for_company(company_key: str) -> str:
     if not api_key:
         raise ValueError(f"Environment variable '{env_var}' is not set for company '{company_key}'.")
     return api_key
+
+
+def get_abaninja_credentials(company_key: str) -> tuple[str, str]:
+    """Returns (api_key, account_uuid) for an AbaNinja company. Raises if not configured."""
+    config = COMPANY_CONFIG.get(company_key)
+    if not config or config.get("system") != "abaninja":
+        raise ValueError(f"'{company_key}' is not an AbaNinja company.")
+    api_key = os.getenv(config["api_key_env"])
+    account_uuid = os.getenv(config["account_uuid_env"])
+    if not api_key:
+        raise ValueError(f"Environment variable '{config['api_key_env']}' is not set.")
+    if not account_uuid:
+        raise ValueError(f"Environment variable '{config['account_uuid_env']}' is not set.")
+    return api_key, account_uuid
