@@ -31,11 +31,15 @@ def _get_auth_header() -> dict:
 def get_contacts() -> list:
     """Fetch all contacts from Lexoffice."""
     logger.info("API call | GET /contacts")
-    response = requests.get(f"{BASE_URL}/contacts", headers=_get_headers())
-    response.raise_for_status()
-    result = response.json().get("content", [])
-    logger.info("API response | GET /contacts status=%d count=%d", response.status_code, len(result))
-    return result
+    try:
+        response = requests.get(f"{BASE_URL}/contacts", headers=_get_headers())
+        response.raise_for_status()
+        result = response.json().get("content", [])
+        logger.info("API response | GET /contacts status=%d count=%d", response.status_code, len(result))
+        return result
+    except requests.HTTPError as e:
+        logger.error("GET /contacts failed | status=%d", e.response.status_code)
+        return [f"Fehler beim Abruf (HTTP {e.response.status_code}): {e.response.text}"]
 
 
 @tool
@@ -44,11 +48,15 @@ def get_invoices() -> list:
     endpoint = "/voucherlist"
     params = {"voucherType": "invoice", "voucherStatus": "any"}
     logger.info("API call | GET %s params=%s", endpoint, params)
-    response = requests.get(f"{BASE_URL}{endpoint}", headers=_get_headers(), params=params)
-    response.raise_for_status()
-    result = response.json().get("content", [])
-    logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
-    return result
+    try:
+        response = requests.get(f"{BASE_URL}{endpoint}", headers=_get_headers(), params=params)
+        response.raise_for_status()
+        result = response.json().get("content", [])
+        logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
+        return result
+    except requests.HTTPError as e:
+        logger.error("GET %s failed | status=%d", endpoint, e.response.status_code)
+        return [f"Fehler beim Abruf (HTTP {e.response.status_code}): {e.response.text}"]
 
 
 @tool
@@ -70,11 +78,15 @@ def get_invoices_by_status(status: str) -> list:
     endpoint = "/voucherlist"
     params = {"voucherType": "invoice", "voucherStatus": status}
     logger.info("API call | GET %s params=%s", endpoint, params)
-    response = requests.get(f"{BASE_URL}{endpoint}", headers=_get_headers(), params=params)
-    response.raise_for_status()
-    result = response.json().get("content", [])
-    logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
-    return result
+    try:
+        response = requests.get(f"{BASE_URL}{endpoint}", headers=_get_headers(), params=params)
+        response.raise_for_status()
+        result = response.json().get("content", [])
+        logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
+        return result
+    except requests.HTTPError as e:
+        logger.error("GET %s failed | status=%d", endpoint, e.response.status_code)
+        return [f"Fehler beim Abruf (HTTP {e.response.status_code}): {e.response.text}"]
 
 
 @tool
@@ -83,11 +95,15 @@ def get_purchase_invoices() -> list:
     endpoint = "/voucherlist"
     params = {"voucherType": "purchaseinvoice", "voucherStatus": "any"}
     logger.info("API call | GET %s params=%s", endpoint, params)
-    response = requests.get(f"{BASE_URL}{endpoint}", headers=_get_headers(), params=params)
-    response.raise_for_status()
-    result = response.json().get("content", [])
-    logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
-    return result
+    try:
+        response = requests.get(f"{BASE_URL}{endpoint}", headers=_get_headers(), params=params)
+        response.raise_for_status()
+        result = response.json().get("content", [])
+        logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
+        return result
+    except requests.HTTPError as e:
+        logger.error("GET %s failed | status=%d", endpoint, e.response.status_code)
+        return [f"Fehler beim Abruf (HTTP {e.response.status_code}): {e.response.text}"]
 
 
 @tool
@@ -185,11 +201,15 @@ def create_lexoffice_tools(api_key: str) -> list:
     def get_contacts() -> list:
         """Fetch all contacts from Lexoffice."""
         logger.info("API call | GET /contacts")
-        response = requests.get(f"{BASE_URL}/contacts", headers=_headers())
-        response.raise_for_status()
-        result = response.json().get("content", [])
-        logger.info("API response | GET /contacts status=%d count=%d", response.status_code, len(result))
-        return result
+        try:
+            response = requests.get(f"{BASE_URL}/contacts", headers=_headers())
+            response.raise_for_status()
+            result = response.json().get("content", [])
+            logger.info("API response | GET /contacts status=%d count=%d", response.status_code, len(result))
+            return result
+        except requests.HTTPError as e:
+            logger.error("GET /contacts failed | status=%d", e.response.status_code)
+            return [f"Fehler beim Abruf (HTTP {e.response.status_code}): {e.response.text}"]
 
     @tool
     def get_invoices() -> list:
@@ -197,11 +217,15 @@ def create_lexoffice_tools(api_key: str) -> list:
         endpoint = "/voucherlist"
         params = {"voucherType": "invoice", "voucherStatus": "any"}
         logger.info("API call | GET %s params=%s", endpoint, params)
-        response = requests.get(f"{BASE_URL}{endpoint}", headers=_headers(), params=params)
-        response.raise_for_status()
-        result = response.json().get("content", [])
-        logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
-        return result
+        try:
+            response = requests.get(f"{BASE_URL}{endpoint}", headers=_headers(), params=params)
+            response.raise_for_status()
+            result = response.json().get("content", [])
+            logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
+            return result
+        except requests.HTTPError as e:
+            logger.error("GET %s failed | status=%d", endpoint, e.response.status_code)
+            return [f"Fehler beim Abruf (HTTP {e.response.status_code}): {e.response.text}"]
 
     @tool
     def get_invoices_by_status(status: str) -> list:
@@ -219,11 +243,15 @@ def create_lexoffice_tools(api_key: str) -> list:
         endpoint = "/voucherlist"
         params = {"voucherType": "invoice", "voucherStatus": status}
         logger.info("API call | GET %s params=%s", endpoint, params)
-        response = requests.get(f"{BASE_URL}{endpoint}", headers=_headers(), params=params)
-        response.raise_for_status()
-        result = response.json().get("content", [])
-        logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
-        return result
+        try:
+            response = requests.get(f"{BASE_URL}{endpoint}", headers=_headers(), params=params)
+            response.raise_for_status()
+            result = response.json().get("content", [])
+            logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
+            return result
+        except requests.HTTPError as e:
+            logger.error("GET %s failed | status=%d", endpoint, e.response.status_code)
+            return [f"Fehler beim Abruf (HTTP {e.response.status_code}): {e.response.text}"]
 
     @tool
     def get_purchase_invoices() -> list:
@@ -231,11 +259,15 @@ def create_lexoffice_tools(api_key: str) -> list:
         endpoint = "/voucherlist"
         params = {"voucherType": "purchaseinvoice", "voucherStatus": "any"}
         logger.info("API call | GET %s params=%s", endpoint, params)
-        response = requests.get(f"{BASE_URL}{endpoint}", headers=_headers(), params=params)
-        response.raise_for_status()
-        result = response.json().get("content", [])
-        logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
-        return result
+        try:
+            response = requests.get(f"{BASE_URL}{endpoint}", headers=_headers(), params=params)
+            response.raise_for_status()
+            result = response.json().get("content", [])
+            logger.info("API response | GET %s status=%d count=%d", endpoint, response.status_code, len(result))
+            return result
+        except requests.HTTPError as e:
+            logger.error("GET %s failed | status=%d", endpoint, e.response.status_code)
+            return [f"Fehler beim Abruf (HTTP {e.response.status_code}): {e.response.text}"]
 
     @tool
     def get_invoice_document(invoice_id: str, save_path: str = "") -> str:

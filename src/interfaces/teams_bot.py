@@ -215,6 +215,7 @@ class CompanyTeamsBot:
             await self._send_pdf_links(turn_context, pdf_paths, user_aad_id=user_aad_id)
         except Exception as e:
             logger.error("Failed to send agent response: %s", e)
+            await turn_context.send_activity(f"Fehler bei der Verarbeitung: {e}")
 
     # ------------------------------------------------------------------
     # File handling
