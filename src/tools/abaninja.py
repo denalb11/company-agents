@@ -117,6 +117,39 @@ def create_abaninja_tools(api_key: str, account_uuid: str) -> list:
             return {"error": f"Fehler (HTTP {e.response.status_code}): {e.response.text}"}
 
     @tool
+    def get_invoice_pdf(invoice_uuid: str) -> str:
+        """Download the PDF for a specific invoice from Abaninja.
+
+        Args:
+            invoice_uuid: The UUID of the invoice.
+
+        Returns:
+            PDF_READY:<path> on success, or an error message.
+        """
+        endpoint = f"/accounts/{account_uuid}/documents/v2/invoices/{invoice_uuid}/actions"
+        logger.info("API call | PATCH %s action=print", endpoint)
+        try:
+            response = requests.patch(
+                f"{BASE_URL}{endpoint}",
+                headers={**_headers(), "Content-Type": "application/json"},
+                json={"action": "print"},
+            )
+            response.raise_for_status()
+            content_type = response.headers.get("Content-Type", "")
+            if "pdf" in content_type or len(response.content) > 1000:
+                out_path = pathlib.Path("uploads") / f"{invoice_uuid}.pdf"
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_bytes(response.content)
+                logger.info("Invoice PDF saved | invoice_uuid=%s path=%s size=%d bytes", invoice_uuid, out_path, len(response.content))
+                return f"PDF_READY:{out_path}"
+            else:
+                logger.warning("Print action returned non-PDF response: %s", response.text[:200])
+                return f"Unerwartete Antwort vom Server: {response.text[:200]}"
+        except requests.HTTPError as e:
+            logger.error("PATCH %s action=print failed | status=%d body=%s", endpoint, e.response.status_code, e.response.text[:200])
+            return f"PDF-Download fehlgeschlagen (HTTP {e.response.status_code}): {e.response.text[:200]}"
+
+    @tool
     def upload_receipt(file_path: str) -> dict:
         """Upload a receipt or supplier invoice (PDF, JPG, PNG) to Abaninja.
 
@@ -156,4 +189,4 @@ def create_abaninja_tools(api_key: str, account_uuid: str) -> list:
             logger.error("POST %s failed | status=%d", endpoint, e.response.status_code)
             return {"error": f"Upload fehlgeschlagen (HTTP {e.response.status_code}): {e.response.text}"}
 
-    return [get_companies, get_invoices, get_invoice_actions, execute_invoice_action, upload_receipt]
+    return [get_companies, get_invoices, get_invoice_actions, execute_invoice_action, get_invoice_pdf, upload_receipt]
