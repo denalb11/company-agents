@@ -16,11 +16,11 @@ USER_PERMISSIONS: dict[str, list[str] | None] = {
     "9e017de4-4bc2-41fb-9ce3-fbfb8cb7e553": None,  # wegen@duempelfeldpartners.com
     "e7eba269-e9ab-4cf1-8fc3-3a4c21a9d154": None,  # wegen@multiscout.de
     "42de74c6-27d4-4346-bd9e-2db35cf406a3": None,  # juliawegen@apparelscout.com
-    # --- Dr. Patrick Dümpelfeld → Dümpelfeld + Nao ---
-    "ed3657be-768d-483e-9585-1f14c00decf6": ["duempelfeld", "nao"],  # duempelfeld@duempelfeldpartners.com
-    "6ed66c0e-2056-4ef5-8a11-b62a8dbc461f": ["duempelfeld", "nao"],  # duempelfeld@procurement-interim.de
-    "081e9a62-a2ab-4263-a2bf-4a11f02877d7": ["duempelfeld", "nao"],  # duempelfeld@savify.ch
-    "5b7de7b7-5fd6-4fee-89e3-435726a21980": ["duempelfeld", "nao"],  # duempelfeld@scoutgroup
+    # --- Dr. Patrick Dümpelfeld → Dümpelfeld + Nao + Savify ---
+    "ed3657be-768d-483e-9585-1f14c00decf6": ["duempelfeld", "nao", "savify"],  # duempelfeld@duempelfeldpartners.com
+    "6ed66c0e-2056-4ef5-8a11-b62a8dbc461f": ["duempelfeld", "nao", "savify"],  # duempelfeld@procurement-interim.de
+    "081e9a62-a2ab-4263-a2bf-4a11f02877d7": ["duempelfeld", "nao", "savify"],  # duempelfeld@savify.ch
+    "5b7de7b7-5fd6-4fee-89e3-435726a21980": ["duempelfeld", "nao", "savify"],  # duempelfeld@scoutgroup
     # --- Ramón Romero → nur Dümpelfeld ---
     "4f0adf15-67a0-45d2-96f5-4d539ca1a868": ["duempelfeld"],  # romero@duempelfeldpartners.com
     "b44d5ab9-9ef8-48f0-940d-9d6863aab77d": ["duempelfeld"],  # romero@procurement-interim.de
