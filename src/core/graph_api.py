@@ -1,11 +1,13 @@
 """
 Microsoft Graph API helper
 ==========================
-Provides async helpers for uploading files to a user's OneDrive via the
-Microsoft Graph API (client credentials flow).
+Provides async helpers for uploading files to a user's OneDrive, and
+sync helpers for sending emails via the Microsoft Graph API
+(client credentials flow).
 
 Required Azure App Registration permissions (Application type, admin consent):
   - Files.ReadWrite.All
+  - Mail.Send
 
 Required environment variables (already used by the bot):
   AZURE_APP_ID           — Bot registration App ID
@@ -13,11 +15,13 @@ Required environment variables (already used by the bot):
   AZURE_TENANT_ID        — Azure AD tenant ID
 """
 
+import base64
 import logging
 import os
 import time
 
 import aiohttp
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -88,3 +92,67 @@ class GraphApiClient:
                     user_aad_id, filename, item.get("id"),
                 )
                 return item
+
+    def send_email(
+        self,
+        sender_upn: str,
+        to_addresses: list[str],
+        subject: str,
+        body_html: str,
+        attachments: list[dict] | None = None,
+    ) -> None:
+        """Send an email via Microsoft Graph API (sync, client credentials).
+
+        Args:
+            sender_upn: UPN or email of the sender mailbox (e.g. 'albayrak@multiscout.com').
+            to_addresses: List of recipient email addresses.
+            subject: Email subject.
+            body_html: HTML body of the email.
+            attachments: Optional list of dicts with 'name' (filename) and 'content' (bytes).
+
+        Raises:
+            requests.HTTPError: On API errors.
+        """
+        token = self._get_token_sync()
+        recipients = [{"emailAddress": {"address": addr}} for addr in to_addresses]
+
+        message: dict = {
+            "subject": subject,
+            "body": {"contentType": "HTML", "content": body_html},
+            "toRecipients": recipients,
+        }
+        if attachments:
+            message["attachments"] = [
+                {
+                    "@odata.type": "#microsoft.graph.fileAttachment",
+                    "name": att["name"],
+                    "contentBytes": base64.b64encode(att["content"]).decode("utf-8"),
+                    "contentType": "application/pdf",
+                }
+                for att in attachments
+            ]
+
+        url = f"{GRAPH_BASE}/users/{sender_upn}/sendMail"
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        response = requests.post(url, headers=headers, json={"message": message, "saveToSentItems": True})
+        response.raise_for_status()
+        logger.info("Email sent | from=%s to=%s subject=%s", sender_upn, to_addresses, subject)
+
+    def _get_token_sync(self) -> str:
+        """Synchronous token fetch using requests."""
+        if self._token and time.time() < self._token_expires - 60:
+            return self._token
+        url = f"https://login.microsoftonline.com/{self._tenant_id}/oauth2/v2.0/token"
+        data = {
+            "grant_type": "client_credentials",
+            "client_id": self._client_id,
+            "client_secret": self._client_secret,
+            "scope": "https://graph.microsoft.com/.default",
+        }
+        response = requests.post(url, data=data)
+        response.raise_for_status()
+        result = response.json()
+        self._token = result["access_token"]
+        self._token_expires = time.time() + result.get("expires_in", 3600)
+        logger.info("Graph API token acquired (sync), expires in %ds", result.get("expires_in", 3600))
+        return self._token

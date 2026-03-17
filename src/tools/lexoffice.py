@@ -706,6 +706,76 @@ def create_lexoffice_tools(api_key: str) -> list:
             return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
 
     # -------------------------------------------------------------------------
+    # EMAIL VERSAND
+    # -------------------------------------------------------------------------
+
+    @tool
+    def send_invoice_by_email(
+        invoice_id: str,
+        to_email: str,
+        sender_upn: str = "",
+        subject: str = "",
+        body: str = "",
+    ) -> str:
+        """Download a Lexoffice invoice as PDF and send it by email via Microsoft 365.
+
+        Steps performed automatically:
+        1. Downloads the invoice PDF from Lexoffice.
+        2. Sends it as an email attachment via Microsoft Graph API.
+
+        Args:
+            invoice_id: The UUID of the invoice in Lexoffice.
+            to_email: Recipient email address.
+            sender_upn: Sender mailbox UPN (e.g. 'albayrak@multiscout.com').
+                        Defaults to GRAPH_SENDER_UPN environment variable.
+            subject: Email subject. If empty, uses 'Rechnung <invoice_id>'.
+            body: HTML email body. If empty, a default German message is used.
+
+        Returns:
+            Success message or error.
+        """
+        from src.core.graph_api import GraphApiClient
+
+        sender = sender_upn or os.getenv("GRAPH_SENDER_UPN", "")
+        if not sender:
+            return "Fehler: GRAPH_SENDER_UPN ist nicht konfiguriert."
+
+        # 1. Download PDF
+        logger.info("send_invoice_by_email | downloading PDF for invoice %s", invoice_id)
+        try:
+            response = requests.get(f"{BASE_URL}/invoices/{invoice_id}/file", headers=_auth_header())
+            response.raise_for_status()
+            pdf_bytes = response.content
+        except requests.HTTPError as e:
+            return f"PDF-Download fehlgeschlagen (HTTP {e.response.status_code}): {e.response.text}"
+
+        # 2. Send email
+        email_subject = subject or f"Rechnung {invoice_id}"
+        email_body = body or (
+            "<p>Sehr geehrte Damen und Herren,</p>"
+            "<p>anbei erhalten Sie Ihre Rechnung als PDF-Anhang.</p>"
+            "<p>Bei Fragen stehen wir Ihnen gerne zur Verfügung.</p>"
+            "<p>Mit freundlichen Grüßen</p>"
+        )
+        filename = f"Rechnung_{invoice_id}.pdf"
+
+        try:
+            graph = GraphApiClient()
+            graph.send_email(
+                sender_upn=sender,
+                to_addresses=[to_email],
+                subject=email_subject,
+                body_html=email_body,
+                attachments=[{"name": filename, "content": pdf_bytes}],
+            )
+            logger.info("Invoice emailed | invoice=%s to=%s", invoice_id, to_email)
+            return f"Rechnung erfolgreich an {to_email} gesendet."
+        except requests.HTTPError as e:
+            return f"E-Mail-Versand fehlgeschlagen (HTTP {e.response.status_code}): {e.response.text}"
+        except Exception as e:
+            return f"E-Mail-Versand fehlgeschlagen: {e}"
+
+    # -------------------------------------------------------------------------
     # DATEIEN / DOKUMENTE HOCHLADEN
     # -------------------------------------------------------------------------
 
@@ -763,6 +833,8 @@ def create_lexoffice_tools(api_key: str) -> list:
         get_payment_conditions, get_posting_categories,
         # Zahlungen & Upload
         get_payments, upload_document,
+        # Email
+        send_invoice_by_email,
     ]
 
 
