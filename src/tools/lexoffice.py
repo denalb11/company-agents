@@ -739,6 +739,7 @@ def create_lexoffice_tools(api_key: str, sender_upn: str = "", sender_from: str 
     def send_invoice_by_email(
         invoice_id: str,
         to_email: str = "",
+        cc_emails: str = "",
         sender_upn: str = "",
         subject: str = "",
         body: str = "",
@@ -753,7 +754,8 @@ def create_lexoffice_tools(api_key: str, sender_upn: str = "", sender_from: str 
         Args:
             invoice_id: The UUID of the invoice in Lexoffice.
             to_email: Recipient email address. If empty, uses the contact's billing email from Lexoffice.
-            sender_upn: Sender mailbox (e.g. 'albayrak@multiscout.com'). Defaults to GRAPH_SENDER_UPN env var.
+            cc_emails: Comma-separated CC email addresses (e.g. 'a@b.com,c@d.com'). Empty = no CC.
+            sender_upn: Sender mailbox. Defaults to company config or GRAPH_SENDER_UPN env var.
             subject: Email subject. If empty, uses 'Ihre Rechnung'.
             body: HTML email body. If empty, a default German message is used.
 
@@ -824,9 +826,11 @@ def create_lexoffice_tools(api_key: str, sender_upn: str = "", sender_from: str 
 
         try:
             graph = GraphApiClient()
+            cc_list = [a.strip() for a in cc_emails.split(",") if a.strip()] if cc_emails else []
             graph.send_email(
                 sender_upn=sender,
                 to_addresses=[recipient],
+                cc_addresses=cc_list or None,
                 subject=email_subject,
                 body_html=email_body,
                 attachments=[{"name": filename, "content": pdf_bytes}],
