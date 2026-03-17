@@ -11,8 +11,10 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://api.lexoffice.io/v1"
 
 
-def create_lexoffice_tools(api_key: str) -> list:
+def create_lexoffice_tools(api_key: str, sender_upn: str = "") -> list:
     """Factory: creates all Lexoffice tools bound to a specific API key."""
+
+    _company_sender_upn = sender_upn
 
     def _headers():
         return {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -34,6 +36,29 @@ def create_lexoffice_tools(api_key: str) -> list:
         response = requests.put(f"{BASE_URL}{endpoint}", headers=_headers(), json=payload)
         response.raise_for_status()
         return response
+
+    def _is_uuid(value: str) -> bool:
+        import re
+        return bool(re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", value.lower()))
+
+    def _find_invoice_uuid_by_number(voucher_number: str) -> str | None:
+        """Search all invoice pages for the given voucher number, return UUID or None."""
+        page = 0
+        while True:
+            resp = requests.get(
+                f"{BASE_URL}/voucherlist",
+                headers=_headers(),
+                params={"voucherType": "invoice", "voucherStatus": "any", "page": page, "size": 100},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            for item in data.get("content", []):
+                if item.get("voucherNumber") == voucher_number:
+                    return item["id"]
+            if data.get("last", True):
+                break
+            page += 1
+        return None
 
     def _download_pdf(endpoint: str, doc_id: str) -> str:
         """Downloads a PDF from the given endpoint and saves it to uploads/."""
@@ -736,17 +761,28 @@ def create_lexoffice_tools(api_key: str) -> list:
         """
         from src.core.graph_api import GraphApiClient
 
-        sender = sender_upn or os.getenv("GRAPH_SENDER_UPN", "")
+        sender = sender_upn or _company_sender_upn or os.getenv("GRAPH_SENDER_UPN", "")
         if not sender:
-            return "Fehler: GRAPH_SENDER_UPN ist nicht konfiguriert (.env: GRAPH_SENDER_UPN=dein@email.de)."
+            return "Fehler: Kein Absender konfiguriert. Bitte sender_upn angeben oder GRAPH_SENDER_UPN in .env setzen."
 
-        # 1. Get invoice details to find contact + voucher number
+        # 1. Resolve voucher number (e.g. "RE317721") to UUID if needed
+        resolved_id = invoice_id
+        if not _is_uuid(invoice_id):
+            try:
+                found = _find_invoice_uuid_by_number(invoice_id)
+                if not found:
+                    return f"Rechnung '{invoice_id}' nicht gefunden. Bitte UUID oder genaue Rechnungsnummer angeben."
+                resolved_id = found
+            except Exception as e:
+                return f"Suche nach Rechnung fehlgeschlagen: {e}"
+
+        # 2. Get invoice details to find contact + voucher number
         try:
-            invoice = _get(f"/invoices/{invoice_id}").json()
+            invoice = _get(f"/invoices/{resolved_id}").json()
         except requests.HTTPError as e:
             return f"Rechnung nicht gefunden (HTTP {e.response.status_code}): {e.response.text}"
 
-        voucher_number = invoice.get("voucherNumber", invoice_id)
+        voucher_number = invoice.get("voucherNumber", resolved_id)
 
         # 2. Auto-lookup recipient email if not provided
         recipient = to_email
@@ -767,9 +803,9 @@ def create_lexoffice_tools(api_key: str) -> list:
                 return "Kein Empfänger gefunden. Bitte to_email angeben."
 
         # 3. Download PDF
-        logger.info("send_invoice_by_email | downloading PDF for invoice %s", invoice_id)
+        logger.info("send_invoice_by_email | downloading PDF for invoice %s", resolved_id)
         try:
-            response = requests.get(f"{BASE_URL}/invoices/{invoice_id}/file", headers=_auth_header())
+            response = requests.get(f"{BASE_URL}/invoices/{resolved_id}/file", headers=_auth_header())
             response.raise_for_status()
             pdf_bytes = response.content
         except requests.HTTPError as e:
@@ -794,7 +830,7 @@ def create_lexoffice_tools(api_key: str) -> list:
                 body_html=email_body,
                 attachments=[{"name": filename, "content": pdf_bytes}],
             )
-            logger.info("Invoice emailed | invoice=%s to=%s", invoice_id, recipient)
+            logger.info("Invoice emailed | invoice=%s to=%s", resolved_id, recipient)
             return f"Rechnung {voucher_number} erfolgreich an {recipient} gesendet."
         except requests.HTTPError as e:
             return f"E-Mail-Versand fehlgeschlagen (HTTP {e.response.status_code}): {e.response.text}"

@@ -38,22 +38,26 @@ COMPANY_CONFIG = {
         "name": "Dümpelfeld Partners",
         "system": "lexoffice",
         "api_key_env": "LEXOFFICE_API_KEY_DUEMPELFELD",
+        "sender_upn": "invoices@duempelfeldpartners.com",
     },
     "multiscout": {
         "name": "multiScout",
         "system": "lexoffice",
         "api_key_env": "LEXOFFICE_API_KEY_MULTISCOUT",
+        "sender_upn": "invoices@multiscout.com",
     },
     "nao": {
         "name": "Nao Intelligence",
         "system": "lexoffice",
         "api_key_env": "LEXOFFICE_API_KEY_NAO",
+        "sender_upn": "invoices@naointelligence.com",
     },
     "savify": {
         "name": "Savify",
         "system": "abaninja",
         "api_key_env": "ABANINJA_API_KEY_SAVIFY",
         "account_uuid_env": "ABANINJA_ACCOUNT_UUID_SAVIFY",
+        "sender_upn": "invoices@savify.io",
     },
 }
 
