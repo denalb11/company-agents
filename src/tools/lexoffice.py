@@ -261,6 +261,67 @@ def create_lexoffice_tools(api_key: str) -> list:
         except requests.HTTPError as e:
             return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
 
+    @tool
+    def create_simple_invoice(
+        contact_id: str,
+        item_name: str,
+        net_amount: float,
+        tax_rate: float,
+        voucher_date: str,
+        quantity: float = 1.0,
+        unit_name: str = "Stück",
+        finalize: bool = False,
+        remark: str = "",
+    ) -> dict:
+        """Create a single-line outgoing invoice in Lexoffice. Use this for simple invoices with one position.
+
+        Args:
+            contact_id: UUID of the contact — get it via get_contacts first.
+            item_name: Name/description of the service or product.
+            net_amount: Net price per unit in EUR (e.g. 150.0).
+            tax_rate: VAT rate in percent (e.g. 19.0 or 0.0).
+            voucher_date: Date as 'YYYY-MM-DD' (e.g. '2026-03-17').
+            quantity: Quantity (default 1.0).
+            unit_name: Unit label, e.g. 'Stück', 'Stunde', 'Pauschal' (default 'Stück').
+            finalize: If True, finalizes immediately — invoice can no longer be edited.
+            remark: Optional closing remark (e.g. payment terms).
+        """
+        from datetime import datetime, timezone, timedelta
+        try:
+            dt = datetime.strptime(voucher_date, "%Y-%m-%d")
+            dt = dt.replace(tzinfo=timezone(timedelta(hours=1)))
+            iso_date = dt.strftime("%Y-%m-%dT00:00:00.000+01:00")
+        except ValueError:
+            iso_date = voucher_date
+
+        line_items = [{
+            "type": "custom",
+            "name": item_name,
+            "quantity": quantity,
+            "unitName": unit_name,
+            "unitPrice": {
+                "currency": "EUR",
+                "netAmount": net_amount,
+                "taxRatePercentage": tax_rate,
+            },
+        }]
+        payload = {
+            "voucherDate": iso_date,
+            "address": {"contactId": contact_id},
+            "lineItems": line_items,
+            "totalPrice": {"currency": "EUR"},
+            "taxConditions": {"taxType": "net"},
+        }
+        if remark:
+            payload["remark"] = remark
+
+        params = {"finalize": "true"} if finalize else {}
+        logger.info("API call | POST /invoices (simple) contact=%s item=%s net=%s", contact_id, item_name, net_amount)
+        try:
+            return _post("/invoices", payload, params=params).json()
+        except requests.HTTPError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+
     # -------------------------------------------------------------------------
     # ANGEBOTE
     # -------------------------------------------------------------------------
@@ -681,7 +742,7 @@ def create_lexoffice_tools(api_key: str) -> list:
         # Kontakte
         get_contacts, get_contact, create_contact,
         # Ausgangsrechnungen
-        get_invoices, get_invoice, get_invoice_pdf, create_invoice,
+        get_invoices, get_invoice, get_invoice_pdf, create_invoice, create_simple_invoice,
         # Angebote
         get_quotations, get_quotation, get_quotation_pdf, create_quotation,
         # Gutschriften
