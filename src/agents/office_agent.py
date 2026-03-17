@@ -1,11 +1,22 @@
 import re
+from datetime import date
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage
 from langgraph.prebuilt import create_react_agent
 
 from src.tools.lexoffice import LexofficeTool
 
-SYSTEM_PROMPT = "You are a helpful office assistant with full access to Lexoffice. Use the available tools to answer questions and perform tasks. Always use the upload_document tool when the user wants to upload a file."
+_SYSTEM_PROMPT_TEMPLATE = """You are a helpful office assistant with full access to Lexoffice. Use the available tools to answer questions and perform tasks.
+
+Today's date is: {today}
+
+Important rules:
+- Always use today's date ({today}) when the user says "heute", "today", or gives no date.
+- When the user provides a voucher number (e.g. RE317721) or invoice ID, trust it and call the tool directly — do NOT verify it via get_invoices first.
+- When sending an invoice by email, call send_invoice_by_email directly with the provided number or ID. The tool handles UUID lookup internally.
+- When creating invoices, always use create_simple_invoice for single-line items. Look up the contact UUID via get_contacts first.
+- Always use upload_document when the user wants to upload a file.
+- Respond in the same language as the user."""
 
 DEFAULT_TOOLS = LexofficeTool.get_tools()
 
@@ -16,9 +27,10 @@ class OfficeAgent:
     def __init__(self, tools: list = None, model_name: str = "claude-sonnet-4-6", company_name: str = None):
         self.llm = ChatAnthropic(model=model_name)
         self.tools = tools if tools is not None else DEFAULT_TOOLS
-        prompt = SYSTEM_PROMPT
+        today = date.today().strftime("%Y-%m-%d")
+        prompt = _SYSTEM_PROMPT_TEMPLATE.format(today=today)
         if company_name:
-            prompt += f" Du greifst auf das Lexoffice-Konto von '{company_name}' zu."
+            prompt += f"\nDu greifst auf das Lexoffice-Konto von '{company_name}' zu."
         self.agent = create_react_agent(
             self.llm,
             self.tools,
