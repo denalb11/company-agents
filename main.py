@@ -12,6 +12,9 @@ def run_cli(orchestrator: Orchestrator) -> None:
     print("Company Agents - Multi-Agent System")
     print("Prefix: ms: / dp: / nao: / sv:  |  'exit' to quit.\n")
 
+    history: list[tuple[str, str]] = []
+    current_company: str | None = None
+
     while True:
         user_input = input("You: ").strip()
         if user_input.lower() in ("exit", "quit"):
@@ -19,8 +22,13 @@ def run_cli(orchestrator: Orchestrator) -> None:
         if not user_input:
             continue
 
-        company_key, message = get_company_for_prefix(user_input)
-        text, pdf_paths = orchestrator.run(message, company_key=company_key)
+        detected_company, message = get_company_for_prefix(user_input)
+        if detected_company:
+            current_company = detected_company  # switch company on new prefix
+
+        text, pdf_paths = orchestrator.run(message, company_key=current_company, history=history)
+        history.append((message, text))
+
         print(f"Agent: {text}")
         if pdf_paths:
             print(f"PDFs: {', '.join(pdf_paths)}")
