@@ -11,11 +11,12 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://api.lexoffice.io/v1"
 
 
-def create_lexoffice_tools(api_key: str, sender_upn: str = "", sender_from: str = "") -> list:
+def create_lexoffice_tools(api_key: str, sender_upn: str = "", sender_from: str = "", legal_name: str = "") -> list:
     """Factory: creates all Lexoffice tools bound to a specific API key."""
 
     _company_sender_upn = sender_upn
     _company_sender_from = sender_from
+    _company_legal_name = legal_name
 
     def _headers():
         return {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -1164,11 +1165,13 @@ def create_lexoffice_tools(api_key: str, sender_upn: str = "", sender_from: str 
 
         # 4. Send email
         email_subject = subject or f"Ihre Rechnung {voucher_number}"
+        signature = f"<p>{_company_legal_name}</p>" if _company_legal_name else ""
         email_body = body or (
             f"<p>Sehr geehrte Damen und Herren,</p>"
             f"<p>anbei erhalten Sie Rechnung <strong>{voucher_number}</strong> als PDF-Anhang.</p>"
             f"<p>Bei Fragen stehen wir Ihnen gerne zur Verfügung.</p>"
             f"<p>Mit freundlichen Grüßen</p>"
+            f"{signature}"
         )
         filename = f"{voucher_number}.pdf"
 

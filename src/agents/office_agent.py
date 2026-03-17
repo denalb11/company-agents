@@ -6,6 +6,24 @@ from langgraph.prebuilt import create_react_agent
 
 from src.tools.lexoffice import LexofficeTool
 
+_HELP_TEXT = """📋 **Verfügbare Funktionen (47 Tools)**
+
+**Profil:** get_profile
+**Kontakte:** get_contacts, get_contact, create_contact, update_contact
+**Ausgangsrechnungen:** get_invoices, get_invoice, get_invoice_pdf, create_invoice, create_simple_invoice
+**Angebote:** get_quotations, get_quotation, get_quotation_pdf, create_quotation
+**Gutschriften:** get_credit_notes, get_credit_note, get_credit_note_pdf, create_credit_note
+**Eingangsrechnungen:** get_purchase_invoices, get_voucher, create_voucher, update_voucher
+**Mahnungen:** get_dunnings, get_dunning, get_dunning_pdf, create_dunning
+**Lieferscheine:** get_delivery_notes, get_delivery_note, get_delivery_note_pdf, create_delivery_note
+**Auftragsbestätigungen:** get_order_confirmations, get_order_confirmation, get_order_confirmation_pdf, create_order_confirmation
+**Artikel:** get_articles, get_article, create_article, update_article, delete_article
+**Stammdaten:** get_recurring_templates, get_payment_conditions, get_posting_categories, get_print_layouts, get_countries
+**Zahlungen & Upload:** get_payments, upload_document
+**E-Mail:** send_invoice_by_email
+
+Prefix: **ms:** multiScout · **dp:** Dümpelfeld Partners · **nao:** Nao Intelligence · **sv:** Savify"""
+
 _SYSTEM_PROMPT_TEMPLATE = """You are a helpful office assistant with full access to Lexoffice. Use the available tools to answer questions and perform tasks.
 
 Today's date is: {today}
@@ -16,6 +34,7 @@ Important rules:
 - When sending an invoice by email: FIRST ask "Soll jemand in CC?" and wait for the answer before calling send_invoice_by_email. If the user provides CC addresses (comma-separated), pass them as cc_emails. If the user says no, call with cc_emails="".
 - When creating invoices, always use create_simple_invoice for single-line items. Look up the contact UUID via get_contacts first.
 - Always use upload_document when the user wants to upload a file.
+- When a task is not possible or you encounter an error, always end your response with: "Tippe **help** für eine Übersicht aller verfügbaren Funktionen."
 - Respond in the same language as the user."""
 
 DEFAULT_TOOLS = LexofficeTool.get_tools()

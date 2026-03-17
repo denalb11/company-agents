@@ -36,13 +36,15 @@ def get_allowed_companies(aad_object_id: str) -> list[str] | None:
 COMPANY_CONFIG = {
     "duempelfeld": {
         "name": "Dümpelfeld Partners",
+        "legal_name": "Dümpelfeld Partners GmbH",
         "system": "lexoffice",
         "api_key_env": "LEXOFFICE_API_KEY_DUEMPELFELD",
-        "sender_upn": "invoices@multiscout.com",       # auth mailbox
-        "sender_from": "invoices@duempelfeldpartners.com",  # visible from address (alias)
+        "sender_upn": "invoices@multiscout.com",
+        "sender_from": "invoices@duempelfeldpartners.com",
     },
     "multiscout": {
         "name": "multiScout",
+        "legal_name": "multiScout GmbH",
         "system": "lexoffice",
         "api_key_env": "LEXOFFICE_API_KEY_MULTISCOUT",
         "sender_upn": "invoices@multiscout.com",
@@ -50,12 +52,14 @@ COMPANY_CONFIG = {
     },
     "nao": {
         "name": "Nao Intelligence",
+        "legal_name": "Nao Intelligence GmbH",
         "system": "lexoffice",
         "api_key_env": "LEXOFFICE_API_KEY_NAO",
         "sender_upn": "invoices@naointelligence.com",
     },
     "savify": {
         "name": "Savify",
+        "legal_name": "Savify AG",
         "system": "abaninja",
         "api_key_env": "ABANINJA_API_KEY_SAVIFY",
         "account_uuid_env": "ABANINJA_ACCOUNT_UUID_SAVIFY",

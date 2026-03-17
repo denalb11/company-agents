@@ -172,6 +172,12 @@ class CompanyTeamsBot:
         channel_name = self._extract_channel_name(activity)
         company_key = get_company_for_channel(channel_name or "")
 
+        # Help command
+        if text.strip().lower() == "help":
+            from src.agents.office_agent import _HELP_TEXT
+            await turn_context.send_activity(_HELP_TEXT)
+            return
+
         # Fallback: prefix-based routing (e.g. "ms: zeige Rechnungen")
         if not company_key:
             company_key, text = get_company_for_prefix(text)

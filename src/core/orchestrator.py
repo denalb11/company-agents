@@ -23,7 +23,7 @@ class Orchestrator:
                 tools = create_abaninja_tools(api_key, account_uuid)
             else:
                 api_key = get_api_key_for_company(company_key)
-                tools = create_lexoffice_tools(api_key, sender_upn=config.get("sender_upn", ""), sender_from=config.get("sender_from", ""))
+                tools = create_lexoffice_tools(api_key, sender_upn=config.get("sender_upn", ""), sender_from=config.get("sender_from", ""), legal_name=config.get("legal_name", ""))
             self._agents[company_key] = OfficeAgent(tools=tools, company_name=company_name)
         return self._agents[company_key]
 

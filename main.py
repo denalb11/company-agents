@@ -22,9 +22,14 @@ def run_cli(orchestrator: Orchestrator) -> None:
         if not user_input:
             continue
 
+        if user_input.lower() == "help":
+            from src.agents.office_agent import _HELP_TEXT
+            print(f"\n{_HELP_TEXT}\n")
+            continue
+
         detected_company, message = get_company_for_prefix(user_input)
         if detected_company:
-            current_company = detected_company  # switch company on new prefix
+            current_company = detected_company
 
         text, pdf_paths = orchestrator.run(message, company_key=current_company, history=history)
         history.append((message, text))
