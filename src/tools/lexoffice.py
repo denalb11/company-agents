@@ -712,19 +712,367 @@ def create_lexoffice_tools(api_key: str, sender_upn: str = "", sender_from: str 
             return [f"Fehler (HTTP {e.response.status_code}): {e.response.text}"]
 
     # -------------------------------------------------------------------------
-    # ZAHLUNGEN
+    # KONTAKT AKTUALISIEREN
+    # -------------------------------------------------------------------------
+
+    @tool
+    def update_contact(contact_id: str, updates: dict) -> dict:
+        """Update an existing contact in Lexoffice.
+
+        Args:
+            contact_id: UUID of the contact to update.
+            updates: Dict of fields to update. Must include 'version' (get via get_contact first).
+                     Example: {"version": 1, "note": "Neuer Hinweis"}
+        """
+        logger.info("API call | PUT /contacts/%s", contact_id)
+        try:
+            return _put(f"/contacts/{contact_id}", updates).json()
+        except requests.HTTPError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+
+    # -------------------------------------------------------------------------
+    # ARTIKEL
+    # -------------------------------------------------------------------------
+
+    @tool
+    def get_article(article_id: str) -> dict:
+        """Retrieve a specific article/product by ID.
+
+        Args:
+            article_id: UUID of the article.
+        """
+        try:
+            return _get(f"/articles/{article_id}").json()
+        except requests.HTTPError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+
+    @tool
+    def create_article(
+        name: str,
+        article_type: str,
+        unit_name: str,
+        price: float,
+        tax_rate: float,
+        article_number: str = "",
+        description: str = "",
+    ) -> dict:
+        """Create a new article/product in Lexoffice.
+
+        Args:
+            name: Article name.
+            article_type: 'PRODUCT' or 'SERVICE'.
+            unit_name: Unit (e.g. 'Stück', 'Stunde', 'Pauschal').
+            price: Net price.
+            tax_rate: VAT rate in percent (e.g. 19.0).
+            article_number: Optional article number.
+            description: Optional description.
+        """
+        payload: dict = {
+            "title": name,
+            "type": article_type,
+            "unitName": unit_name,
+            "price": {"netAmount": price, "taxRatePercentage": tax_rate, "currency": "EUR"},
+        }
+        if article_number:
+            payload["articleNumber"] = article_number
+        if description:
+            payload["description"] = description
+        logger.info("API call | POST /articles name=%s", name)
+        try:
+            return _post("/articles", payload).json()
+        except requests.HTTPError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+
+    @tool
+    def update_article(article_id: str, updates: dict) -> dict:
+        """Update an existing article in Lexoffice.
+
+        Args:
+            article_id: UUID of the article.
+            updates: Full article payload with updated fields (must include 'version').
+        """
+        logger.info("API call | PUT /articles/%s", article_id)
+        try:
+            return _put(f"/articles/{article_id}", updates).json()
+        except requests.HTTPError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+
+    @tool
+    def delete_article(article_id: str) -> str:
+        """Delete an article from Lexoffice.
+
+        Args:
+            article_id: UUID of the article to delete.
+        """
+        logger.info("API call | DELETE /articles/%s", article_id)
+        try:
+            response = requests.delete(f"{BASE_URL}/articles/{article_id}", headers=_headers())
+            response.raise_for_status()
+            return f"Artikel {article_id} erfolgreich gelöscht."
+        except requests.HTTPError as e:
+            return f"Fehler (HTTP {e.response.status_code}): {e.response.text}"
+
+    # -------------------------------------------------------------------------
+    # BELEG AKTUALISIEREN
+    # -------------------------------------------------------------------------
+
+    @tool
+    def update_voucher(voucher_id: str, updates: dict) -> dict:
+        """Update an existing voucher (Eingangsbeleg) in Lexoffice.
+
+        Args:
+            voucher_id: UUID of the voucher.
+            updates: Full voucher payload with updated fields (must include 'version').
+        """
+        logger.info("API call | PUT /vouchers/%s", voucher_id)
+        try:
+            return _put(f"/vouchers/{voucher_id}", updates).json()
+        except requests.HTTPError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+
+    # -------------------------------------------------------------------------
+    # MAHNUNGEN
+    # -------------------------------------------------------------------------
+
+    @tool
+    def get_dunning(dunning_id: str) -> dict:
+        """Retrieve a specific dunning notice (Mahnung) by ID.
+
+        Args:
+            dunning_id: UUID of the dunning notice.
+        """
+        try:
+            return _get(f"/dunnings/{dunning_id}").json()
+        except requests.HTTPError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+
+    @tool
+    def get_dunning_pdf(dunning_id: str) -> str:
+        """Download the PDF for a specific dunning notice.
+
+        Args:
+            dunning_id: UUID of the dunning notice.
+        """
+        return _download_pdf(f"/dunnings/{dunning_id}/file", dunning_id)
+
+    @tool
+    def create_dunning(
+        contact_id: str,
+        voucher_date: str,
+        preceding_invoice_id: str,
+        line_items: list,
+        currency: str = "EUR",
+        finalize: bool = False,
+        remark: str = "",
+    ) -> dict:
+        """Create a dunning notice (Mahnung) in Lexoffice.
+
+        Args:
+            contact_id: UUID of the contact (debtor).
+            voucher_date: Date as 'YYYY-MM-DD'.
+            preceding_invoice_id: UUID of the original invoice this dunning refers to.
+            line_items: Line items (same structure as create_simple_invoice).
+            currency: Currency code (default 'EUR').
+            finalize: If True, finalizes immediately.
+            remark: Optional remark.
+        """
+        from datetime import datetime, timezone, timedelta
+        try:
+            dt = datetime.strptime(voucher_date, "%Y-%m-%d").replace(tzinfo=timezone(timedelta(hours=1)))
+            iso_date = dt.strftime("%Y-%m-%dT00:00:00.000+01:00")
+        except ValueError:
+            iso_date = voucher_date
+
+        payload = {
+            "voucherDate": iso_date,
+            "address": {"contactId": contact_id},
+            "lineItems": line_items,
+            "totalPrice": {"currency": currency},
+            "taxConditions": {"taxType": "net"},
+        }
+        if remark:
+            payload["remark"] = remark
+        params = {"finalize": "true"} if finalize else {}
+        if preceding_invoice_id:
+            params["precedingSalesVoucherId"] = preceding_invoice_id
+        logger.info("API call | POST /dunnings contact=%s", contact_id)
+        try:
+            return _post("/dunnings", payload, params=params).json()
+        except requests.HTTPError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+
+    # -------------------------------------------------------------------------
+    # LIEFERSCHEINE
+    # -------------------------------------------------------------------------
+
+    @tool
+    def get_delivery_note(delivery_note_id: str) -> dict:
+        """Retrieve a specific delivery note (Lieferschein) by ID.
+
+        Args:
+            delivery_note_id: UUID of the delivery note.
+        """
+        try:
+            return _get(f"/delivery-notes/{delivery_note_id}").json()
+        except requests.HTTPError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+
+    @tool
+    def get_delivery_note_pdf(delivery_note_id: str) -> str:
+        """Download the PDF for a specific delivery note.
+
+        Args:
+            delivery_note_id: UUID of the delivery note.
+        """
+        return _download_pdf(f"/delivery-notes/{delivery_note_id}/file", delivery_note_id)
+
+    @tool
+    def create_delivery_note(
+        contact_id: str,
+        voucher_date: str,
+        line_items: list,
+        finalize: bool = False,
+        remark: str = "",
+    ) -> dict:
+        """Create a delivery note (Lieferschein) in Lexoffice.
+
+        Args:
+            contact_id: UUID of the contact.
+            voucher_date: Date as 'YYYY-MM-DD'.
+            line_items: Line items (same structure as create_simple_invoice).
+            finalize: If True, finalizes immediately.
+            remark: Optional remark.
+        """
+        from datetime import datetime, timezone, timedelta
+        try:
+            dt = datetime.strptime(voucher_date, "%Y-%m-%d").replace(tzinfo=timezone(timedelta(hours=1)))
+            iso_date = dt.strftime("%Y-%m-%dT00:00:00.000+01:00")
+        except ValueError:
+            iso_date = voucher_date
+
+        payload = {
+            "voucherDate": iso_date,
+            "address": {"contactId": contact_id},
+            "lineItems": line_items,
+            "totalPrice": {"currency": "EUR"},
+            "taxConditions": {"taxType": "net"},
+        }
+        if remark:
+            payload["remark"] = remark
+        params = {"finalize": "true"} if finalize else {}
+        logger.info("API call | POST /delivery-notes contact=%s", contact_id)
+        try:
+            return _post("/delivery-notes", payload, params=params).json()
+        except requests.HTTPError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+
+    # -------------------------------------------------------------------------
+    # AUFTRAGSBESTÄTIGUNGEN
+    # -------------------------------------------------------------------------
+
+    @tool
+    def get_order_confirmation(order_confirmation_id: str) -> dict:
+        """Retrieve a specific order confirmation (Auftragsbestätigung) by ID.
+
+        Args:
+            order_confirmation_id: UUID of the order confirmation.
+        """
+        try:
+            return _get(f"/order-confirmations/{order_confirmation_id}").json()
+        except requests.HTTPError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+
+    @tool
+    def get_order_confirmation_pdf(order_confirmation_id: str) -> str:
+        """Download the PDF for a specific order confirmation.
+
+        Args:
+            order_confirmation_id: UUID of the order confirmation.
+        """
+        return _download_pdf(f"/order-confirmations/{order_confirmation_id}/file", order_confirmation_id)
+
+    @tool
+    def create_order_confirmation(
+        contact_id: str,
+        voucher_date: str,
+        line_items: list,
+        currency: str = "EUR",
+        tax_type: str = "net",
+        finalize: bool = False,
+        introduction: str = "",
+        remark: str = "",
+    ) -> dict:
+        """Create an order confirmation (Auftragsbestätigung) in Lexoffice.
+
+        Args:
+            contact_id: UUID of the contact.
+            voucher_date: Date as 'YYYY-MM-DD'.
+            line_items: Line items (same structure as create_simple_invoice).
+            currency: Currency code (default 'EUR').
+            tax_type: 'net', 'gross', or 'vatfree'.
+            finalize: If True, finalizes immediately.
+            introduction: Optional introduction text.
+            remark: Optional remark.
+        """
+        from datetime import datetime, timezone, timedelta
+        try:
+            dt = datetime.strptime(voucher_date, "%Y-%m-%d").replace(tzinfo=timezone(timedelta(hours=1)))
+            iso_date = dt.strftime("%Y-%m-%dT00:00:00.000+01:00")
+        except ValueError:
+            iso_date = voucher_date
+
+        payload = {
+            "voucherDate": iso_date,
+            "address": {"contactId": contact_id},
+            "lineItems": line_items,
+            "totalPrice": {"currency": currency},
+            "taxConditions": {"taxType": tax_type},
+        }
+        if introduction:
+            payload["introduction"] = introduction
+        if remark:
+            payload["remark"] = remark
+        params = {"finalize": "true"} if finalize else {}
+        logger.info("API call | POST /order-confirmations contact=%s", contact_id)
+        try:
+            return _post("/order-confirmations", payload, params=params).json()
+        except requests.HTTPError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+
+    # -------------------------------------------------------------------------
+    # STAMMDATEN (ERGÄNZT)
+    # -------------------------------------------------------------------------
+
+    @tool
+    def get_print_layouts() -> list:
+        """Fetch all available print layouts (Drucklayouts) from Lexoffice."""
+        logger.info("API call | GET /print-layouts")
+        try:
+            return _get("/print-layouts").json()
+        except requests.HTTPError as e:
+            return [f"Fehler (HTTP {e.response.status_code}): {e.response.text}"]
+
+    @tool
+    def get_countries() -> list:
+        """Fetch all available countries with tax classifications from Lexoffice."""
+        logger.info("API call | GET /countries")
+        try:
+            return _get("/countries").json()
+        except requests.HTTPError as e:
+            return [f"Fehler (HTTP {e.response.status_code}): {e.response.text}"]
+
+    # -------------------------------------------------------------------------
+    # ZAHLUNGEN (nur lesend)
     # -------------------------------------------------------------------------
 
     @tool
     def get_payments(voucher_id: str = "") -> dict:
-        """Retrieve payment information for a voucher from Lexoffice.
+        """Retrieve payment information from Lexoffice. READ-ONLY — payments cannot be created via API.
 
         Args:
-            voucher_id: Optional UUID of the voucher to get payments for.
+            voucher_id: Optional UUID of a specific voucher to get payment info for.
         """
-        params = {}
-        if voucher_id:
-            params["openAmount"] = voucher_id
+        params = {"voucherId": voucher_id} if voucher_id else {}
         logger.info("API call | GET /payments voucher_id=%s", voucher_id)
         try:
             return _get("/payments", params=params).json()
@@ -884,7 +1232,7 @@ def create_lexoffice_tools(api_key: str, sender_upn: str = "", sender_from: str 
         # Profil
         get_profile,
         # Kontakte
-        get_contacts, get_contact, create_contact,
+        get_contacts, get_contact, create_contact, update_contact,
         # Ausgangsrechnungen
         get_invoices, get_invoice, get_invoice_pdf, create_invoice, create_simple_invoice,
         # Angebote
@@ -892,13 +1240,18 @@ def create_lexoffice_tools(api_key: str, sender_upn: str = "", sender_from: str 
         # Gutschriften
         get_credit_notes, get_credit_note, get_credit_note_pdf, create_credit_note,
         # Eingangsrechnungen / Belege
-        get_purchase_invoices, get_voucher, create_voucher,
-        # Weitere Dokumente
-        get_order_confirmations, get_delivery_notes, get_dunnings,
-        # Artikel & Vorlagen
-        get_articles, get_recurring_templates,
-        # Stammdaten
-        get_payment_conditions, get_posting_categories,
+        get_purchase_invoices, get_voucher, create_voucher, update_voucher,
+        # Mahnungen
+        get_dunnings, get_dunning, get_dunning_pdf, create_dunning,
+        # Lieferscheine
+        get_delivery_notes, get_delivery_note, get_delivery_note_pdf, create_delivery_note,
+        # Auftragsbestätigungen
+        get_order_confirmations, get_order_confirmation, get_order_confirmation_pdf, create_order_confirmation,
+        # Artikel
+        get_articles, get_article, create_article, update_article, delete_article,
+        # Vorlagen & Stammdaten
+        get_recurring_templates, get_payment_conditions, get_posting_categories,
+        get_print_layouts, get_countries,
         # Zahlungen & Upload
         get_payments, upload_document,
         # Email
