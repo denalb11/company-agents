@@ -270,6 +270,7 @@ def create_lexoffice_tools(api_key: str) -> list:
         voucher_date: str,
         quantity: float = 1.0,
         unit_name: str = "Stück",
+        shipping_type: str = "service",
         finalize: bool = False,
         remark: str = "",
     ) -> dict:
@@ -280,9 +281,10 @@ def create_lexoffice_tools(api_key: str) -> list:
             item_name: Name/description of the service or product.
             net_amount: Net price per unit in EUR (e.g. 150.0).
             tax_rate: VAT rate in percent (e.g. 19.0 or 0.0).
-            voucher_date: Date as 'YYYY-MM-DD' (e.g. '2026-03-17').
+            voucher_date: Date as 'YYYY-MM-DD' (e.g. '2026-03-17'). Also used as service/delivery date.
             quantity: Quantity (default 1.0).
             unit_name: Unit label, e.g. 'Stück', 'Stunde', 'Pauschal' (default 'Stück').
+            shipping_type: Leistungsart — 'service' (Leistungsdatum, default), 'delivery' (Lieferung), 'none'.
             finalize: If True, finalizes immediately — invoice can no longer be edited.
             remark: Optional closing remark (e.g. payment terms).
         """
@@ -311,6 +313,10 @@ def create_lexoffice_tools(api_key: str) -> list:
             "lineItems": line_items,
             "totalPrice": {"currency": "EUR"},
             "taxConditions": {"taxType": "net"},
+            "shippingConditions": {
+                "shippingDate": iso_date,
+                "shippingType": shipping_type,
+            },
         }
         if remark:
             payload["remark"] = remark
