@@ -100,6 +100,7 @@ class GraphApiClient:
         subject: str,
         body_html: str,
         attachments: list[dict] | None = None,
+        from_address: str = "",
     ) -> None:
         """Send an email via Microsoft Graph API (sync, client credentials).
 
@@ -121,6 +122,8 @@ class GraphApiClient:
             "body": {"contentType": "HTML", "content": body_html},
             "toRecipients": recipients,
         }
+        if from_address:
+            message["from"] = {"emailAddress": {"address": from_address}}
         if attachments:
             message["attachments"] = [
                 {

@@ -11,10 +11,11 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://api.lexoffice.io/v1"
 
 
-def create_lexoffice_tools(api_key: str, sender_upn: str = "") -> list:
+def create_lexoffice_tools(api_key: str, sender_upn: str = "", sender_from: str = "") -> list:
     """Factory: creates all Lexoffice tools bound to a specific API key."""
 
     _company_sender_upn = sender_upn
+    _company_sender_from = sender_from
 
     def _headers():
         return {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -829,6 +830,7 @@ def create_lexoffice_tools(api_key: str, sender_upn: str = "") -> list:
                 subject=email_subject,
                 body_html=email_body,
                 attachments=[{"name": filename, "content": pdf_bytes}],
+                from_address=_company_sender_from,
             )
             logger.info("Invoice emailed | invoice=%s to=%s", resolved_id, recipient)
             return f"Rechnung {voucher_number} erfolgreich an {recipient} gesendet."

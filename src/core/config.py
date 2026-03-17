@@ -38,13 +38,15 @@ COMPANY_CONFIG = {
         "name": "Dümpelfeld Partners",
         "system": "lexoffice",
         "api_key_env": "LEXOFFICE_API_KEY_DUEMPELFELD",
-        "sender_upn": "invoices@duempelfeldpartners.com",
+        "sender_upn": "invoices@multiscout.com",       # auth mailbox
+        "sender_from": "invoices@duempelfeldpartners.com",  # visible from address (alias)
     },
     "multiscout": {
         "name": "multiScout",
         "system": "lexoffice",
         "api_key_env": "LEXOFFICE_API_KEY_MULTISCOUT",
         "sender_upn": "invoices@multiscout.com",
+        "sender_from": "invoices@multiscout.com",
     },
     "nao": {
         "name": "Nao Intelligence",
