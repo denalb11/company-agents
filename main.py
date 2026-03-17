@@ -8,8 +8,9 @@ from src.core.orchestrator import Orchestrator
 
 
 def run_cli(orchestrator: Orchestrator) -> None:
+    from src.core.config import get_company_for_prefix
     print("Company Agents - Multi-Agent System")
-    print("Type 'exit' to quit.\n")
+    print("Prefix: ms: / dp: / nao: / sv:  |  'exit' to quit.\n")
 
     while True:
         user_input = input("You: ").strip()
@@ -18,8 +19,12 @@ def run_cli(orchestrator: Orchestrator) -> None:
         if not user_input:
             continue
 
-        response = orchestrator.run(user_input)
-        print(f"Agent: {response}\n")
+        company_key, message = get_company_for_prefix(user_input)
+        text, pdf_paths = orchestrator.run(message, company_key=company_key)
+        print(f"Agent: {text}")
+        if pdf_paths:
+            print(f"PDFs: {', '.join(pdf_paths)}")
+        print()
 
 
 def run_teams(orchestrator: Orchestrator) -> None:
