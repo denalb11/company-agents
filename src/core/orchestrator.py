@@ -9,7 +9,7 @@ class Orchestrator:
 
     def __init__(self):
         self._agents: dict[str, OfficeAgent] = {}
-        self._default_agent = OfficeAgent(tools=LexofficeTool.tools)
+        self._default_agent = OfficeAgent(tools=LexofficeTool.get_tools())
 
     def _get_agent(self, company_key: str | None) -> OfficeAgent:
         if not company_key:
